@@ -1,0 +1,97 @@
+services:
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3001:3001"
+    networks:
+      - app_network
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_caddy_data:/data
+      - caddy_caddy_config:/config
+    networks:
+      - app_network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - app_network
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_API_VERSION=1.44
+    command: --cleanup --interval 300
+    networks:
+      - app_network
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-300}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-300}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /opt/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app_network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    restart: unless-stopped
+    ports:
+      - "5432:6432"
+    volumes:
+      - /root/infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - /root/infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+
+volumes:
+  portainer_data:
+  postgres_data:
+  uptime_kuma_data:
+  caddy_caddy_data:
+    external: true
+  caddy_caddy_config:
+    external: true
+
+networks:
+  app_network:
+    external: true

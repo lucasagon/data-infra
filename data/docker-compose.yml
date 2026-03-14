@@ -1,0 +1,70 @@
+services:
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: pgbouncer
+      MB_DB_PORT: 6432
+      MB_DB_DBNAME: ${MB_DB_DBNAME}
+      MB_DB_USER: ${MB_DB_USER}
+      MB_DB_PASS: ${MB_DB_PASS}
+      MB_SITE_URL: ${MB_SITE_URL}
+    volumes:
+      - metabase_data:/metabase-data
+    networks:
+      - app_network
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      TZ: America/Sao_Paulo
+      N8N_HOST: ${N8N_HOST}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: pgbouncer
+      DB_POSTGRESDB_PORT: 6432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${N8N_DB_USER}
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASS}
+    volumes:
+      - n8n_n8n_data:/home/node/.n8n
+    networks:
+      - app_network
+
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver
+    restart: unless-stopped
+    environment:
+      CB_SERVER_BIND_ADDRESS: "0.0.0.0"
+      CB_SERVER_PORT: 8978
+      CB_AUTH_ADMIN_NAME: ${CB_ADMIN_USER}
+      CB_AUTH_ADMIN_PASSWORD: ${CB_ADMIN_PASSWORD}
+    ports:
+      - "8978:8978"
+    volumes:
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
+    networks:
+      - app_network
+  
+
+volumes:
+  metabase_data:
+    external: true
+  n8n_n8n_data:
+    external: true
+  cloudbeaver_data:
+
+networks:
+  app_network:
+    external: true

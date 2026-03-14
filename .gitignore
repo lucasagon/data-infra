@@ -1,0 +1,18 @@
+.*
+!.gitignore
+.ssh
+.env
+
+.acessos.md
+
+# Backups
+backups/
+*.sqlite
+*.tar.gz
+*.sql
+
+/n8n_back*
+
+infra/pgbouncer/userlist.txt
+
+.gitconfig
