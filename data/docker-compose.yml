@@ -22,6 +22,12 @@ services:
     image: n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     ports:
       - "5678:5678"
     environment:
@@ -40,6 +46,15 @@ services:
       - n8n_n8n_data:/home/node/.n8n
     networks:
       - app_network
+
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   cloudbeaver:
     image: dbeaver/cloudbeaver:latest
