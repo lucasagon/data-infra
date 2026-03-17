@@ -1,7 +1,7 @@
 # Runbooks — Stack de Dados
 
 **Ambiente:** Ubuntu Server / Docker
-**Stack:** PostgreSQL · PgBouncer · Metabase · n8n · Airbyte · CloudBeaver · Caddy · Uptime Kuma · Portainer · Watchtower
+**Stack:** PostgreSQL · PgBouncer · Metabase · n8n · Airbyte · CloudBeaver · Caddy · Uptime Kuma · Portainer · Watchtower · Autoheal
 
 ---
 
@@ -19,6 +19,7 @@
 | Uptime Kuma | [uptime-kuma.md](uptime-kuma.md) |
 | Portainer | [portainer.md](portainer.md) |
 | Watchtower | [watchtower.md](watchtower.md) |
+| Autoheal | [autoheal.md](autoheal.md) |
 | Incidentes comuns | [incidentes.md](incidentes.md) |
 
 ---
@@ -31,6 +32,9 @@
 | [002-migracao_n8n_sqlite_postgres](../troubleshooting/002-migracao_n8n_sqlite_postgres.md) | Migração do n8n de SQLite para PostgreSQL |
 | [003-pgbouncer_deploy](../troubleshooting/003-pgbouncer_deploy.md) | Deploy do PgBouncer — problemas encadeados |
 | [004-n8n_encryption_key](../troubleshooting/004-n8n_encryption_key.md) | n8n — Mismatching encryption keys |
+| [005-n8n_import_workflows](../troubleshooting/005-n8n_import_workflows.md) | n8n — Importação de workflows |
+| [006-n8n_update_postgres_credentials](../troubleshooting/006-n8n_update_postgres_credentials.md) | n8n — Atualização de credenciais PostgreSQL |
+| [007-n8n_webhook_url_duplicada](../troubleshooting/007-n8n_webhook_url_duplicada.md) | n8n — Webhook URL duplicada |
 
 ---
 

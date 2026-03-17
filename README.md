@@ -34,6 +34,7 @@ Serviços de suporte:
   Portainer:9000/9443   — gestão de containers
   Uptime Kuma:3001      — monitoramento
   Watchtower            — atualização automática de imagens
+  Autoheal              — reinício automático de containers unhealthy
   Airbyte:8000          — ingestão de dados (ELT)
 ```
 
@@ -49,6 +50,7 @@ Serviços de suporte:
 | Portainer | `portainer/portainer-ce:latest` | `9000`, `9443` | `infra/` |
 | Uptime Kuma | `louislam/uptime-kuma:latest` | `3001` | `infra/` |
 | Watchtower | `containrrr/watchtower` | — | `infra/` |
+| Autoheal | `willfarrell/autoheal` | — | `data/` |
 | n8n | `n8nio/n8n:latest` | `5678` | `data/` |
 | Metabase | `metabase/metabase:latest` | `3000` | `data/` |
 | CloudBeaver | `dbeaver/cloudbeaver:latest` | `8978` | `data/` |
@@ -67,7 +69,7 @@ Serviços de suporte:
 │       ├── pgbouncer.ini        # configuração do pool
 │       └── userlist.txt         # credenciais do auth_user (não versionado)
 ├── data/
-│   ├── docker-compose.yml       # n8n, Metabase, CloudBeaver
+│   ├── docker-compose.yml       # n8n, Metabase, CloudBeaver, Autoheal
 │   └── .env                     # variáveis de ambiente (não versionado)
 └── docs/
     └── pt-br/
