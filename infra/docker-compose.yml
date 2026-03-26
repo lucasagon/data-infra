@@ -47,7 +47,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_API_VERSION=1.44
-    command: --cleanup --interval 300
+    command: --cleanup --interval 300 --stop-timeout 60
     networks:
       - app_network
 

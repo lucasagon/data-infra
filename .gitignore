@@ -16,3 +16,5 @@ backups/
 infra/pgbouncer/userlist.txt
 
 .gitconfig
+
+/projects
