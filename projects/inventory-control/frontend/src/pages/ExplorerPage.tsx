@@ -456,13 +456,13 @@ export function ExplorerPage() {
   );
 
   useEffect(() => {
-    loadFolders().catch(() => setErrorMessage("Nao foi possivel carregar a estrutura de pastas."));
+    loadFolders().catch(() => setErrorMessage("Não foi possível carregar a estrutura de pastas."));
     loadAllItems().catch(() => undefined);
     api.get("/v1/settings/folder-types").then((response) => setFolderTypeTemplates(response.data)).catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    loadItems(selectedFolderId).catch(() => setErrorMessage("Nao foi possivel carregar os itens da pasta."));
+    loadItems(selectedFolderId).catch(() => setErrorMessage("Não foi possível carregar os itens da pasta."));
   }, [selectedFolderId]);
 
   useEffect(() => {
@@ -693,7 +693,7 @@ export function ExplorerPage() {
         setMessage(`${itemsToMove.length} item${itemsToMove.length !== 1 ? "ns" : ""} movido${itemsToMove.length !== 1 ? "s" : ""} com sucesso.`);
       }
     } catch {
-      setMessage(undefined, "Nao foi possivel concluir a movimentacao por arrastar e soltar.");
+      setMessage(undefined, "Não foi possível concluir a movimentação por arrastar e soltar.");
     } finally {
       clearDragState();
     }
@@ -801,7 +801,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage(`Pasta "${response.data.name}" criada com sucesso.`);
     } catch {
-      setMessage(undefined, "Nao foi possivel criar a pasta.");
+      setMessage(undefined, "Não foi possível criar a pasta.");
     } finally {
       setSubmitting(false);
     }
@@ -825,7 +825,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage(`Pasta "${response.data.name}" atualizada com sucesso.`);
     } catch {
-      setMessage(undefined, "Nao foi possivel atualizar a pasta.");
+      setMessage(undefined, "Não foi possível atualizar a pasta.");
     } finally {
       setSubmitting(false);
     }
@@ -848,7 +848,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage("Pasta movida com sucesso.");
     } catch {
-      setMessage(undefined, "Nao foi possivel mover a pasta.");
+      setMessage(undefined, "Não foi possível mover a pasta.");
     } finally {
       setSubmitting(false);
     }
@@ -874,7 +874,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage(`Item "${itemForm.name}" criado com sucesso.`);
     } catch {
-      setMessage(undefined, "Nao foi possivel criar o item.");
+      setMessage(undefined, "Não foi possível criar o item.");
     } finally {
       setSubmitting(false);
     }
@@ -903,7 +903,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage(`Item "${itemForm.name}" atualizado com sucesso.`);
     } catch {
-      setMessage(undefined, "Nao foi possivel atualizar o item.");
+      setMessage(undefined, "Não foi possível atualizar o item.");
     } finally {
       setSubmitting(false);
     }
@@ -930,7 +930,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage("Item movido com sucesso.");
     } catch {
-      setMessage(undefined, "Nao foi possivel mover o item.");
+      setMessage(undefined, "Não foi possível mover o item.");
     } finally {
       setSubmitting(false);
     }
@@ -953,7 +953,7 @@ export function ExplorerPage() {
       setDialogMode(null);
       setMessage("Saida de estoque registrada com sucesso.");
     } catch {
-      setMessage(undefined, "Nao foi possivel registrar a saida de estoque.");
+      setMessage(undefined, "Não foi possível registrar a saída de estoque.");
     } finally {
       setSubmitting(false);
     }
@@ -966,7 +966,7 @@ export function ExplorerPage() {
     }
 
     const confirmed = window.confirm(
-      `Tem certeza que deseja excluir a pasta "${folder.name}"? Essa acao e irreversivel.`,
+      `Tem certeza que deseja excluir a pasta "${folder.name}"? Essa ação e irreversível.`,
     );
     setContextMenu(null);
 
@@ -982,14 +982,14 @@ export function ExplorerPage() {
       await loadFolders(preferredFolderId);
       await loadItems(preferredFolderId);
       await loadAllItems();
-      setMessage(`Pasta "${folder.name}" excluida com sucesso.`);
+      setMessage(`Pasta "${folder.name}" excluída com sucesso.`);
     } catch (error) {
       const apiError = error as { response?: { data?: { error?: { code?: string } } } };
       if (apiError.response?.data?.error?.code === "FOLDER_NOT_EMPTY") {
-        setMessage(undefined, "Nao foi possivel excluir: a pasta ainda possui subpastas ou itens.");
+        setMessage(undefined, "Não foi possível excluir: a pasta ainda possui subpastas ou itens.");
         return;
       }
-      setMessage(undefined, "Nao foi possivel excluir a pasta.");
+      setMessage(undefined, "Não foi possível excluir a pasta.");
     }
   }
 
@@ -1009,7 +1009,7 @@ export function ExplorerPage() {
       setSelectedItemId(null);
       setMessage(`${selectedItemIds.size} item${selectedItemIds.size !== 1 ? "ns" : ""} excluido${selectedItemIds.size !== 1 ? "s" : ""} com sucesso.`);
     } catch {
-      setMessage(undefined, "Nao foi possivel excluir os itens.");
+      setMessage(undefined, "Não foi possível excluir os itens.");
     }
   }
 
@@ -1255,7 +1255,7 @@ export function ExplorerPage() {
                               className="block w-full rounded-md px-2 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
                               onClick={() => {
                                 const confirmed = window.confirm(
-                                  `Tem certeza que deseja excluir ${selectedItemIds.size} ${selectedItemIds.size === 1 ? "item" : "itens"}? Essa acao e irreversivel.`,
+                                  `Tem certeza que deseja excluir ${selectedItemIds.size} ${selectedItemIds.size === 1 ? "item" : "itens"}? Essa ação e irreversível.`,
                                 );
                                 if (confirmed) {
                                   handleDeleteMultipleItems();
@@ -1743,7 +1743,7 @@ export function ExplorerPage() {
       ) : null}
 
       {dialogMode === "stock-out" ? (
-        <Modal description="Registre uma saida de estoque com motivo e observacoes." onClose={() => setDialogMode(null)} title="Saida de estoque">
+        <Modal description="Registre uma saída de estoque com motivo e observacoes." onClose={() => setDialogMode(null)} title="Saida de estoque">
           <form className="space-y-4" onSubmit={handleStockOut}>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block">
