@@ -168,12 +168,10 @@ function normalizeForSearch(value: string) {
 function FolderTreeNode({
   folder,
   selectedFolderId,
-  selectedFolderIds,
   expandedIds,
   childrenByParent,
   dragOverFolderId,
   onSelect,
-  onFolderClick,
   onToggle,
   onContextMenu,
   onDragOverFolder,
@@ -183,12 +181,10 @@ function FolderTreeNode({
 }: {
   folder: FolderSummary;
   selectedFolderId: string | null;
-  selectedFolderIds: Set<string>;
   expandedIds: Set<string>;
   childrenByParent: Map<string | null, FolderSummary[]>;
   dragOverFolderId: string | null;
   onSelect: (folderId: string) => void;
-  onFolderClick: (folderId: string, event: React.MouseEvent) => void;
   onToggle: (folderId: string) => void;
   onContextMenu: (event: React.MouseEvent, entityType: "folder" | "item", entityId: string) => void;
   onDragOverFolder: (folderId: string) => void;
@@ -201,15 +197,13 @@ function FolderTreeNode({
   const isSelected = selectedFolderId === folder.id;
   const hasChildren = children.length > 0;
 
-  const isSelectedMulti = selectedFolderIds.has(folder.id);
-
   return (
     <div>
       <div
         className={`flex items-center gap-2 rounded-xl px-2 py-1 text-sm ${
           dragOverFolderId === folder.id
             ? "bg-[var(--brand-primary-soft)] text-slate-900 ring-1 ring-[var(--brand-primary)]"
-            : isSelected || isSelectedMulti
+            : isSelected
               ? "bg-[var(--brand-primary-soft)] text-slate-900"
               : "text-slate-700 hover:bg-slate-100"
         }`}
@@ -236,7 +230,7 @@ function FolderTreeNode({
 
         <button
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={(event) => onFolderClick(folder.id, event)}
+          onClick={() => onSelect(folder.id)}
           onDoubleClick={() => onSelect(folder.id)}
           type="button"
         >
@@ -260,10 +254,8 @@ function FolderTreeNode({
               onDragOverFolder={onDragOverFolder}
               onDropEntityOnFolder={onDropEntityOnFolder}
               onSelect={onSelect}
-              onFolderClick={onFolderClick}
               onToggle={onToggle}
               selectedFolderId={selectedFolderId}
-              selectedFolderIds={selectedFolderIds}
             />
           ))}
         </div>
@@ -280,9 +272,9 @@ export function ExplorerPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
-  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
+  const [selectedContentFolderIds, setSelectedContentFolderIds] = useState<Set<string>>(new Set());
   const [lastClickedItemId, setLastClickedItemId] = useState<string | null>(null);
-  const [lastClickedFolderId, setLastClickedFolderId] = useState<string | null>(null);
+  const [lastClickedContentFolderId, setLastClickedContentFolderId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
@@ -572,19 +564,17 @@ export function ExplorerPage() {
     setSelectedFolderId(folderId);
     setSelectedItemId(null);
     setSelectedItemIds(new Set());
-    setSelectedFolderIds(new Set());
+    setSelectedContentFolderIds(new Set());
     setLastClickedItemId(null);
-    setLastClickedFolderId(null);
+    setLastClickedContentFolderId(null);
     if (folderId) {
       setExpandedIds((current) => new Set(current).add(folderId));
     }
   }
 
-  function handleFolderClick(folderId: string, event: React.MouseEvent) {
-    event.stopPropagation();
-
+  function handleContentFolderClick(folderId: string, event: React.MouseEvent) {
     if (event.ctrlKey || event.metaKey) {
-      setSelectedFolderIds((current) => {
+      setSelectedContentFolderIds((current) => {
         const next = new Set(current);
         if (next.has(folderId)) {
           next.delete(folderId);
@@ -593,11 +583,10 @@ export function ExplorerPage() {
         }
         return next;
       });
-      setLastClickedFolderId(folderId);
-    } else if (event.shiftKey && lastClickedFolderId) {
-      const folderList = childrenByParent.get(null) ?? [];
-      const lastIndex = folderList.findIndex((f) => f.id === lastClickedFolderId);
-      const currentIndex = folderList.findIndex((f) => f.id === folderId);
+      setLastClickedContentFolderId(folderId);
+    } else if (event.shiftKey && lastClickedContentFolderId) {
+      const lastIndex = childFolders.findIndex((f) => f.id === lastClickedContentFolderId);
+      const currentIndex = childFolders.findIndex((f) => f.id === folderId);
 
       if (lastIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(lastIndex, currentIndex);
@@ -605,11 +594,11 @@ export function ExplorerPage() {
         const newSelection = new Set<string>();
 
         for (let i = start; i <= end; i++) {
-          newSelection.add(folderList[i].id);
+          newSelection.add(childFolders[i].id);
         }
 
-        setSelectedFolderIds(newSelection);
-        setLastClickedFolderId(folderId);
+        setSelectedContentFolderIds(newSelection);
+        setLastClickedContentFolderId(folderId);
       }
     } else {
       selectFolder(folderId);
@@ -1107,10 +1096,8 @@ export function ExplorerPage() {
                   onDragOverFolder={setDragOverFolderId}
                   onDropEntityOnFolder={dropEntityOnFolder}
                   onSelect={selectFolder}
-                  onFolderClick={handleFolderClick}
                   onToggle={toggleFolder}
                   selectedFolderId={selectedFolderId}
-                  selectedFolderIds={selectedFolderIds}
                 />
               ))}
             </div>
@@ -1340,12 +1327,13 @@ export function ExplorerPage() {
                   <tbody>
                     {childFolders.map((folder) => (
                       <tr
-                        className={`border-b border-slate-100 hover:bg-slate-50 ${
+                        className={`border-b border-slate-100 ${selectedContentFolderIds.has(folder.id) ? "bg-[var(--brand-primary-soft)]/70" : "hover:bg-slate-50"} ${
                           dragOverContentFolderId === folder.id && draggedEntity?.entityType === "item"
                             ? "bg-[var(--brand-primary-soft)]/60"
                             : ""
                         }`}
                         key={folder.id}
+                        onClick={(event) => handleContentFolderClick(folder.id, event)}
                         onContextMenu={(event) => handleContextMenu(event, "folder", folder.id)}
                         onDragLeave={() => setDragOverContentFolderId(null)}
                         onDragOver={(event) => handleContentFolderDragOver(event, folder.id)}
@@ -1432,13 +1420,13 @@ export function ExplorerPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {childFolders.map((folder) => (
                   <button
-                    className={`rounded-none border bg-slate-50 p-5 text-left hover:border-[var(--brand-primary)]/40 ${
+                    className={`rounded-none border p-5 text-left ${selectedContentFolderIds.has(folder.id) ? "border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]/60" : "border-slate-200 bg-white hover:bg-slate-50 hover:border-[var(--brand-primary)]/40"} ${
                       dragOverContentFolderId === folder.id && draggedEntity?.entityType === "item"
                         ? "border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]/50"
-                        : "border-slate-200"
+                        : ""
                     }`}
                     key={folder.id}
-                    onClick={() => selectFolder(folder.id)}
+                    onClick={(event) => handleContentFolderClick(folder.id, event)}
                     onDragLeave={() => setDragOverContentFolderId(null)}
                     onDragOver={(event) => handleContentFolderDragOver(event, folder.id)}
                     onDrop={(event) => handleContentFolderDrop(event, folder.id)}
