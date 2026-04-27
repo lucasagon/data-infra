@@ -71,6 +71,7 @@ type SearchResult = {
 type DragEntity = {
   entityType: "folder" | "item";
   id: string;
+  ids?: string[];
 };
 
 function createFolderForm(parentId: string | null, folder?: FolderSummary) {
@@ -602,7 +603,15 @@ export function ExplorerPage() {
   }
 
   function handleDragStart(entityType: "folder" | "item", id: string) {
-    setDraggedEntity({ entityType, id });
+    const draggedIds = entityType === "item" && selectedItemIds.has(id)
+      ? Array.from(selectedItemIds)
+      : [id];
+
+    setDraggedEntity({
+      entityType,
+      id,
+      ids: draggedIds
+    });
     setDragOverFolderId(null);
     setDragOverContentFolderId(null);
   }
@@ -654,22 +663,32 @@ export function ExplorerPage() {
         await loadAllItems();
         setMessage("Pasta movida com sucesso.");
       } else {
-        const sourceItem = allItems.find((item) => item.id === draggedEntity.id);
-        if (!sourceItem || sourceItem.folderId === targetFolderId) {
+        const itemsToMove = draggedEntity.ids || [draggedEntity.id];
+        const sourceItems = itemsToMove
+          .map((id) => allItems.find((item) => item.id === id))
+          .filter((item) => item !== undefined) as ItemSummary[];
+
+        if (sourceItems.length === 0 || sourceItems.every((item) => item.folderId === targetFolderId)) {
           clearDragState();
           return;
         }
 
-        await api.post(`/v1/items/${draggedEntity.id}/transfer`, {
-          destinationFolderId: targetFolderId,
-          reason: "Reorganizacao de estrutura",
-          notes: "Movimentado pelo explorer (arrastar e soltar)",
-        });
+        const movePromises = sourceItems.map((item) =>
+          api.post(`/v1/items/${item.id}/transfer`, {
+            destinationFolderId: targetFolderId,
+            reason: "Reorganizacao de estrutura",
+            notes: "Movimentado pelo explorer (arrastar e soltar)",
+          }),
+        );
+
+        await Promise.all(movePromises);
 
         await loadItems(selectedFolderId);
         await loadFolders(selectedFolderId);
         await loadAllItems();
-        setMessage("Item movido com sucesso.");
+        setSelectedItemIds(new Set());
+        setSelectedItemId(null);
+        setMessage(`${itemsToMove.length} item${itemsToMove.length !== 1 ? "ns" : ""} movido${itemsToMove.length !== 1 ? "s" : ""} com sucesso.`);
       }
     } catch {
       setMessage(undefined, "Nao foi possivel concluir a movimentacao por arrastar e soltar.");
@@ -981,6 +1000,26 @@ export function ExplorerPage() {
     }
   }
 
+  async function handleDeleteMultipleItems() {
+    setMessage();
+
+    try {
+      const deletePromises = Array.from(selectedItemIds).map((itemId) =>
+        api.post(`/v1/items/${itemId}/inactivate`),
+      );
+
+      await Promise.all(deletePromises);
+      await loadItems(selectedFolderId);
+      await loadFolders(selectedFolderId);
+      await loadAllItems();
+      setSelectedItemIds(new Set());
+      setSelectedItemId(null);
+      setMessage(`${selectedItemIds.size} item${selectedItemIds.size !== 1 ? "ns" : ""} excluido${selectedItemIds.size !== 1 ? "s" : ""} com sucesso.`);
+    } catch {
+      setMessage(undefined, "Nao foi possivel excluir os itens.");
+    }
+  }
+
   const rootFolders = childrenByParent.get(null) ?? [];
 
   return (
@@ -995,12 +1034,12 @@ export function ExplorerPage() {
       </div>
 
       <div className="mt-5 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] h-[calc(100vh-200px)]">
-        <aside className="rounded-none border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.35)] overflow-y-auto">
+        <aside className="rounded-none border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.35)] flex flex-col">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">N A V E G A Ç Ã O</p>
           </div>
 
-          <div className="rounded-none border border-slate-200 bg-slate-50 p-3">
+          <div className="rounded-none border border-slate-200 bg-slate-50 p-3 flex-1 overflow-y-auto">
             <div className="space-y-1">
               {rootFolders.map((folder) => (
                 <FolderTreeNode
@@ -1192,6 +1231,37 @@ export function ExplorerPage() {
                         >
                           Novo item
                         </button>
+                        {selectedItemIds.size > 0 ? (
+                          <>
+                            <div className="my-2 border-t border-slate-100" />
+                            <div className="px-2 pb-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Ações em massa</div>
+                            <button
+                              className="block w-full rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100"
+                              onClick={() => {
+                                setDialogMode("move-item");
+                                setOptionsMenuOpen(false);
+                              }}
+                              type="button"
+                            >
+                              Mover {selectedItemIds.size} item{selectedItemIds.size !== 1 ? "ns" : ""}
+                            </button>
+                            <button
+                              className="block w-full rounded-md px-2 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                              onClick={() => {
+                                const confirmed = window.confirm(
+                                  `Tem certeza que deseja excluir ${selectedItemIds.size} item${selectedItemIds.size !== 1 ? "ns" : ""}? Essa acao e irreversivel.`,
+                                );
+                                if (confirmed) {
+                                  handleDeleteMultipleItems();
+                                  setOptionsMenuOpen(false);
+                                }
+                              }}
+                              type="button"
+                            >
+                              Excluir {selectedItemIds.size} item{selectedItemIds.size !== 1 ? "ns" : ""}
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     ) : null}
                     </div>
