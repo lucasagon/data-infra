@@ -994,8 +994,8 @@ export function ExplorerPage() {
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="rounded-none border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.35)]">
+      <div className="mt-5 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] h-[calc(100vh-200px)]">
+        <aside className="rounded-none border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.35)] overflow-y-auto">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">N A V E G A Ç Ã O</p>
           </div>
@@ -1022,7 +1022,7 @@ export function ExplorerPage() {
           </div>
         </aside>
 
-        <section className="space-y-5">
+        <section className="space-y-5 overflow-y-auto">
           <article className="rounded-none border border-slate-200 bg-white p-5 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.25)]">
             <form className="relative" onSubmit={handleSearchSubmit}>
               <div className="flex flex-wrap items-center gap-2">
@@ -1260,13 +1260,13 @@ export function ExplorerPage() {
                         onDragStart={() => handleDragStart("item", item.id)}
                       >
                         <td className="px-5 py-3">
-                          <button className="flex items-center gap-3 text-left" onClick={(e) => { e.stopPropagation(); handleItemClick(item.id, e); }} type="button">
+                          <div className="flex items-center gap-3 text-left">
                             <FileIcon className="h-5 w-5 text-sky-600" />
                             <div>
                               <div className="font-medium">{item.name}</div>
                               <div className="text-xs text-slate-400">{item.internalCode}</div>
                             </div>
-                          </button>
+                          </div>
                         </td>
                         <td className="px-5 py-3 text-slate-500">{item.type === "asset" ? "Patrimonio" : "Estoque"}</td>
                         <td className="px-5 py-3 text-slate-500">
@@ -1275,14 +1275,14 @@ export function ExplorerPage() {
                         <td className="px-5 py-3 text-slate-500">R$ {Number(item.totalValue).toFixed(2)}</td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={() => openEditItemModal(item)} type="button">
+                            <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }} type="button">
                               Editar
                             </button>
-                            <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={() => openMoveItemModal(item)} type="button">
+                            <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); openMoveItemModal(item); }} type="button">
                               Mover
                             </button>
                             {item.type === "stock" ? (
-                              <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={() => openStockOutModal(item)} type="button">
+                              <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); openStockOutModal(item); }} type="button">
                                 Saida
                               </button>
                             ) : null}
