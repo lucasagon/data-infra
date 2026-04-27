@@ -1565,7 +1565,7 @@ export function ExplorerPage() {
             </div>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium">Descricao</span>
+              <span className="mb-2 block text-sm font-medium">Descrição</span>
               <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setFolderForm((current) => ({ ...current, description: event.target.value }))} value={folderForm.description} />
             </label>
 
@@ -1612,7 +1612,7 @@ export function ExplorerPage() {
             </div>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium">Descricao</span>
+              <span className="mb-2 block text-sm font-medium">Descrição</span>
               <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setFolderForm((current) => ({ ...current, description: event.target.value }))} value={folderForm.description} />
             </label>
 
@@ -1701,7 +1701,7 @@ export function ExplorerPage() {
             </div>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium">Descricao</span>
+              <span className="mb-2 block text-sm font-medium">Descrição</span>
               <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} value={itemForm.description} />
             </label>
 
