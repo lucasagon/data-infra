@@ -168,10 +168,12 @@ function normalizeForSearch(value: string) {
 function FolderTreeNode({
   folder,
   selectedFolderId,
+  selectedFolderIds,
   expandedIds,
   childrenByParent,
   dragOverFolderId,
   onSelect,
+  onFolderClick,
   onToggle,
   onContextMenu,
   onDragOverFolder,
@@ -181,10 +183,12 @@ function FolderTreeNode({
 }: {
   folder: FolderSummary;
   selectedFolderId: string | null;
+  selectedFolderIds: Set<string>;
   expandedIds: Set<string>;
   childrenByParent: Map<string | null, FolderSummary[]>;
   dragOverFolderId: string | null;
   onSelect: (folderId: string) => void;
+  onFolderClick: (folderId: string, event: React.MouseEvent) => void;
   onToggle: (folderId: string) => void;
   onContextMenu: (event: React.MouseEvent, entityType: "folder" | "item", entityId: string) => void;
   onDragOverFolder: (folderId: string) => void;
@@ -197,13 +201,15 @@ function FolderTreeNode({
   const isSelected = selectedFolderId === folder.id;
   const hasChildren = children.length > 0;
 
+  const isSelectedMulti = selectedFolderIds.has(folder.id);
+
   return (
     <div>
       <div
         className={`flex items-center gap-2 rounded-xl px-2 py-1 text-sm ${
           dragOverFolderId === folder.id
             ? "bg-[var(--brand-primary-soft)] text-slate-900 ring-1 ring-[var(--brand-primary)]"
-            : isSelected
+            : isSelected || isSelectedMulti
               ? "bg-[var(--brand-primary-soft)] text-slate-900"
               : "text-slate-700 hover:bg-slate-100"
         }`}
@@ -230,7 +236,7 @@ function FolderTreeNode({
 
         <button
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={() => onSelect(folder.id)}
+          onClick={(event) => onFolderClick(folder.id, event)}
           onDoubleClick={() => onSelect(folder.id)}
           type="button"
         >
@@ -254,8 +260,10 @@ function FolderTreeNode({
               onDragOverFolder={onDragOverFolder}
               onDropEntityOnFolder={onDropEntityOnFolder}
               onSelect={onSelect}
+              onFolderClick={onFolderClick}
               onToggle={onToggle}
               selectedFolderId={selectedFolderId}
+              selectedFolderIds={selectedFolderIds}
             />
           ))}
         </div>
@@ -272,7 +280,9 @@ export function ExplorerPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
   const [lastClickedItemId, setLastClickedItemId] = useState<string | null>(null);
+  const [lastClickedFolderId, setLastClickedFolderId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
@@ -562,9 +572,47 @@ export function ExplorerPage() {
     setSelectedFolderId(folderId);
     setSelectedItemId(null);
     setSelectedItemIds(new Set());
+    setSelectedFolderIds(new Set());
     setLastClickedItemId(null);
+    setLastClickedFolderId(null);
     if (folderId) {
       setExpandedIds((current) => new Set(current).add(folderId));
+    }
+  }
+
+  function handleFolderClick(folderId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedFolderIds((current) => {
+        const next = new Set(current);
+        if (next.has(folderId)) {
+          next.delete(folderId);
+        } else {
+          next.add(folderId);
+        }
+        return next;
+      });
+      setLastClickedFolderId(folderId);
+    } else if (event.shiftKey && lastClickedFolderId) {
+      const folderList = childrenByParent.get(null) ?? [];
+      const lastIndex = folderList.findIndex((f) => f.id === lastClickedFolderId);
+      const currentIndex = folderList.findIndex((f) => f.id === folderId);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const newSelection = new Set<string>();
+
+        for (let i = start; i <= end; i++) {
+          newSelection.add(folderList[i].id);
+        }
+
+        setSelectedFolderIds(newSelection);
+        setLastClickedFolderId(folderId);
+      }
+    } else {
+      selectFolder(folderId);
     }
   }
 
@@ -1059,8 +1107,10 @@ export function ExplorerPage() {
                   onDragOverFolder={setDragOverFolderId}
                   onDropEntityOnFolder={dropEntityOnFolder}
                   onSelect={selectFolder}
+                  onFolderClick={handleFolderClick}
                   onToggle={toggleFolder}
                   selectedFolderId={selectedFolderId}
+                  selectedFolderIds={selectedFolderIds}
                 />
               ))}
             </div>
@@ -1326,7 +1376,7 @@ export function ExplorerPage() {
 
                     {items.map((item) => (
                       <tr
-                        className={`border-b border-slate-100 hover:bg-slate-50 ${selectedItemIds.has(item.id) ? "bg-[var(--brand-primary-soft)]/70" : ""}`}
+                        className={`border-b border-slate-100 ${selectedItemIds.has(item.id) ? "bg-[var(--brand-primary-soft)]/70" : "hover:bg-slate-50"}`}
                         key={item.id}
                         onContextMenu={(event) => handleContextMenu(event, "item", item.id)}
                         onDoubleClick={() => openEditItemModal(item)}
@@ -1412,7 +1462,7 @@ export function ExplorerPage() {
 
                 {items.map((item) => (
                   <button
-                    className={`rounded-none border p-5 text-left ${selectedItemIds.has(item.id) ? "border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]/60" : "border-slate-200 bg-white hover:border-[var(--brand-primary)]/40"}`}
+                    className={`rounded-none border p-5 text-left ${selectedItemIds.has(item.id) ? "border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]/60" : "border-slate-200 bg-white hover:bg-slate-50 hover:border-[var(--brand-primary)]/40"}`}
                     key={item.id}
                     onClick={(event) => handleItemClick(item.id, event)}
                     onDoubleClick={() => openEditItemModal(item)}
