@@ -727,15 +727,6 @@ export function ExplorerPage() {
 
   function handleContextMenu(event: React.MouseEvent, entityType: "folder" | "item", entityId: string) {
     event.preventDefault();
-    if (entityType === "folder") {
-      setSelectedFolderId(entityId);
-    } else {
-      if (!event.ctrlKey && !event.metaKey) {
-        setSelectedItemIds(new Set([entityId]));
-        setSelectedItemId(entityId);
-        setLastClickedItemId(entityId);
-      }
-    }
 
     setContextMenu({
       x: event.clientX,
