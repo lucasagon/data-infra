@@ -558,12 +558,14 @@ export function ExplorerPage() {
     });
   }
 
-  function selectFolder(folderId: string) {
+  function selectFolder(folderId: string | null) {
     setSelectedFolderId(folderId);
     setSelectedItemId(null);
     setSelectedItemIds(new Set());
     setLastClickedItemId(null);
-    setExpandedIds((current) => new Set(current).add(folderId));
+    if (folderId) {
+      setExpandedIds((current) => new Set(current).add(folderId));
+    }
   }
 
   function handleItemClick(itemId: string, event: React.MouseEvent) {
@@ -1041,6 +1043,19 @@ export function ExplorerPage() {
 
           <div className="rounded-none border border-slate-200 bg-slate-50 p-3 flex-1 overflow-y-auto">
             <div className="space-y-1">
+              <button
+                className={`flex w-full items-center gap-2 rounded-xl px-2 py-1 text-sm ${
+                  selectedFolderId === null
+                    ? "bg-[var(--brand-primary-soft)] text-slate-900"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+                onClick={() => selectFolder(null)}
+                type="button"
+              >
+                <FolderIcon className="h-4 w-4 text-amber-500" />
+                <span className="font-medium">Todos os Arquivos</span>
+              </button>
+              <div className="border-t border-slate-200" />
               {rootFolders.map((folder) => (
                 <FolderTreeNode
                   childrenByParent={childrenByParent}
