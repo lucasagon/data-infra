@@ -1061,7 +1061,7 @@ export function ExplorerPage() {
           </div>
         </aside>
 
-        <section className="space-y-5 overflow-y-auto">
+        <section className="space-y-5 overflow-y-auto flex flex-col">
           <article className="rounded-none border border-slate-200 bg-white p-5 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.25)]">
             <form className="relative" onSubmit={handleSearchSubmit}>
               <div className="flex flex-wrap items-center gap-2">
@@ -1153,7 +1153,7 @@ export function ExplorerPage() {
               </div>
             </article>
           ) : (
-            <article className="rounded-none border border-slate-200 bg-white shadow-[0_20px_50px_-35px_rgba(15,23,42,0.25)]">
+            <article className="rounded-none border border-slate-200 bg-white shadow-[0_20px_50px_-35px_rgba(15,23,42,0.25)] flex flex-col h-full">
               <div className="border-b border-slate-100 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
@@ -1270,7 +1270,7 @@ export function ExplorerPage() {
               </div>
 
               {viewMode === "list" ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto flex-1">
                 <table className="min-w-full text-sm">
                   <thead className="border-b border-slate-200 bg-white">
                     <tr className="text-left text-slate-500">
@@ -1372,7 +1372,7 @@ export function ExplorerPage() {
                 </table>
               </div>
             ) : (
-            <div className="p-5">
+            <div className="p-5 flex-1 overflow-auto">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {childFolders.map((folder) => (
                   <button
