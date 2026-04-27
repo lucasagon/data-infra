@@ -1243,13 +1243,13 @@ export function ExplorerPage() {
                               }}
                               type="button"
                             >
-                              Mover {selectedItemIds.size} item{selectedItemIds.size !== 1 ? "ns" : ""}
+                              Mover {selectedItemIds.size} {selectedItemIds.size === 1 ? "item" : "itens"}
                             </button>
                             <button
                               className="block w-full rounded-md px-2 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
                               onClick={() => {
                                 const confirmed = window.confirm(
-                                  `Tem certeza que deseja excluir ${selectedItemIds.size} item${selectedItemIds.size !== 1 ? "ns" : ""}? Essa acao e irreversivel.`,
+                                  `Tem certeza que deseja excluir ${selectedItemIds.size} ${selectedItemIds.size === 1 ? "item" : "itens"}? Essa acao e irreversivel.`,
                                 );
                                 if (confirmed) {
                                   handleDeleteMultipleItems();
@@ -1258,7 +1258,7 @@ export function ExplorerPage() {
                               }}
                               type="button"
                             >
-                              Excluir {selectedItemIds.size} item{selectedItemIds.size !== 1 ? "ns" : ""}
+                              Excluir {selectedItemIds.size} {selectedItemIds.size === 1 ? "item" : "itens"}
                             </button>
                           </>
                         ) : null}
