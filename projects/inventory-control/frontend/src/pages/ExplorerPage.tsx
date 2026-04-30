@@ -4,14 +4,18 @@ import { api } from "../lib/api";
 
 type FolderType = "physical_location" | "logical_group" | "mixed";
 type ItemType = "stock" | "asset";
+type StockMovementType = "stock_in" | "stock_out" | "adjustment_in" | "adjustment_out" | "transfer";
 type ViewMode = "list" | "grid";
 type DialogMode =
   | "new-folder"
   | "edit-folder"
   | "move-folder"
+  | "force-delete-folder"
   | "new-item"
   | "edit-item"
+  | "bulk-edit-items"
   | "move-item"
+  | "delete-item"
   | "stock-out"
   | null;
 
@@ -34,6 +38,7 @@ type FolderTypeTemplate = {
   label: string;
   description?: string;
   baseType: FolderType;
+  colorHex: string;
   isSystem: boolean;
 };
 
@@ -50,14 +55,22 @@ type ItemSummary = {
   description?: string;
   barcode?: string;
   notes?: string;
+  photos: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: string;
+    url: string;
+  }>;
 };
 
 type ContextMenuState =
   | {
       x: number;
       y: number;
-      entityType: "folder" | "item";
-      entityId: string;
+      entityType: "folder" | "item" | "content";
+      entityId: string | null;
     }
   | null;
 
@@ -72,6 +85,19 @@ type DragEntity = {
   entityType: "folder" | "item";
   id: string;
   ids?: string[];
+};
+
+type ItemMovement = {
+  id: string;
+  movementType: StockMovementType;
+  quantity: number;
+  reason: string;
+  notes?: string | null;
+  createdAt: string;
+  performedBy?: {
+    name?: string;
+    email?: string;
+  } | null;
 };
 
 function createFolderForm(parentId: string | null, folder?: FolderSummary) {
@@ -92,9 +118,9 @@ function createItemForm(folderId: string | null, item?: ItemSummary) {
     description: item?.description ?? "",
     internalCode: item?.internalCode ?? `SKU-${Date.now()}`,
     barcode: item?.barcode ?? "",
-    minStock: item?.minStock ?? 0,
-    currentQuantity: item ? Number(item.currentQuantity) : 0,
-    unitPrice: item ? Number(item.unitPrice) : 0,
+    minStock: item ? String(item.minStock) : "0",
+    currentQuantity: item ? String(item.currentQuantity) : "0",
+    unitPrice: item ? String(item.unitPrice) : "0",
     notes: item?.notes ?? "",
   };
 }
@@ -112,7 +138,7 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
           <div>
             <h3 className="text-xl font-semibold">{title}</h3>
@@ -124,15 +150,15 @@ function Modal({
           </button>
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );
 }
 
-function FolderIcon({ className = "h-4 w-4 text-amber-500" }: { className?: string }) {
+function FolderIcon({ className = "h-4 w-4 text-amber-500", color }: { className?: string; color?: string }) {
   return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className={className} fill="none" style={color ? { color } : undefined} viewBox="0 0 24 24">
       <path
         d="M3 6.75A2.25 2.25 0 0 1 5.25 4.5H9c.597 0 1.169.237 1.591.659L12 6.57c.422.422.994.659 1.591.659h5.159A2.25 2.25 0 0 1 21 9.479v7.771a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 17.25V6.75Z"
         fill="currentColor"
@@ -165,6 +191,84 @@ function normalizeForSearch(value: string) {
     .trim();
 }
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("INVALID_FILE_READER_RESULT"));
+        return;
+      }
+      const base64Data = result.split(",")[1];
+      resolve(base64Data ?? "");
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("IMAGE_LOAD_FAILED"));
+    };
+    image.src = url;
+  });
+}
+
+async function compressImageFile(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  const image = await loadImageFromFile(file);
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const targetWidth = Math.max(1, Math.round(image.width * scale));
+  const targetHeight = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return file;
+  }
+
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+  const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+  const quality = outputType === "image/jpeg" ? 0.8 : 0.92;
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((result) => resolve(result), outputType, quality);
+  });
+
+  if (!blob || blob.size >= file.size) {
+    return file;
+  }
+
+  const baseName = file.name.replace(/\.[^/.]+$/, "");
+  const extension = outputType === "image/png" ? "png" : "jpg";
+  return new File([blob], `${baseName}.${extension}`, { type: outputType });
+}
+
 function FolderTreeNode({
   folder,
   selectedFolderId,
@@ -177,6 +281,7 @@ function FolderTreeNode({
   onDragOverFolder,
   onDropEntityOnFolder,
   onClearDragOverFolder,
+  getFolderColor,
   depth = 0,
 }: {
   folder: FolderSummary;
@@ -188,8 +293,9 @@ function FolderTreeNode({
   onToggle: (folderId: string) => void;
   onContextMenu: (event: React.MouseEvent, entityType: "folder" | "item", entityId: string) => void;
   onDragOverFolder: (folderId: string) => void;
-  onDropEntityOnFolder: (folderId: string) => void;
+  onDropEntityOnFolder: (folderId: string, event?: React.DragEvent) => void;
   onClearDragOverFolder: () => void;
+  getFolderColor: (folder: FolderSummary) => string | undefined;
   depth?: number;
 }) {
   const children = childrenByParent.get(folder.id) ?? [];
@@ -215,18 +321,21 @@ function FolderTreeNode({
         }}
         onDrop={(event) => {
           event.preventDefault();
-          onDropEntityOnFolder(folder.id);
+          onDropEntityOnFolder(folder.id, event);
         }}
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
       >
-        <button
-          className="flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white text-[10px] text-slate-500"
-          disabled={!hasChildren}
-          onClick={() => hasChildren && onToggle(folder.id)}
-          type="button"
-        >
-          {hasChildren ? (isExpanded ? "-" : "+") : ""}
-        </button>
+        {hasChildren ? (
+          <button
+            className="flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white text-[10px] text-slate-500"
+            onClick={() => onToggle(folder.id)}
+            type="button"
+          >
+            {isExpanded ? "-" : "+"}
+          </button>
+        ) : (
+          <span className="h-5 w-5" />
+        )}
 
         <button
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -234,7 +343,7 @@ function FolderTreeNode({
           onDoubleClick={() => onSelect(folder.id)}
           type="button"
         >
-          <FolderIcon className="h-4 w-4 text-amber-500" />
+          <FolderIcon className="h-4 w-4 text-amber-500" color={getFolderColor(folder)} />
           <span className="truncate">{folder.name}</span>
         </button>
       </div>
@@ -256,6 +365,7 @@ function FolderTreeNode({
               onSelect={onSelect}
               onToggle={onToggle}
               selectedFolderId={selectedFolderId}
+              getFolderColor={getFolderColor}
             />
           ))}
         </div>
@@ -286,6 +396,10 @@ export function ExplorerPage() {
   const [moveParentId, setMoveParentId] = useState("ROOT");
   const [itemForm, setItemForm] = useState(createItemForm(null));
   const [moveItemFolderId, setMoveItemFolderId] = useState("");
+  const [bulkEditForm, setBulkEditForm] = useState({
+    description: "",
+    notes: "",
+  });
   const [stockOutForm, setStockOutForm] = useState({
     itemId: "",
     quantity: 1,
@@ -300,8 +414,38 @@ export function ExplorerPage() {
   const [draggedEntity, setDraggedEntity] = useState<DragEntity | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverContentFolderId, setDragOverContentFolderId] = useState<string | null>(null);
+  const [pendingForceDeleteFolder, setPendingForceDeleteFolder] = useState<{ id: string; name: string } | null>(null);
+  const [pendingItemPhotos, setPendingItemPhotos] = useState<File[]>([]);
+  const [newItemStep, setNewItemStep] = useState(1);
+  const [expandedEditSections, setExpandedEditSections] = useState<Record<string, boolean>>({
+    identification: true,
+    fiscal: false,
+    stock: true,
+    photos: false,
+    movement: false,
+  });
+  const [itemMovements, setItemMovements] = useState<ItemMovement[]>([]);
+  const [stockOperationForm, setStockOperationForm] = useState({
+    direction: "in" as "in" | "out",
+    quantity: 1,
+    reason: "",
+    notes: "",
+  });
+  const [expandedPhoto, setExpandedPhoto] = useState<{
+    photos: Array<{ url: string; fileName: string }>;
+    index: number;
+  } | null>(null);
+
+  const newItemStepValid =
+    (newItemStep === 1 && itemForm.name.trim().length >= 2 && itemForm.type && itemForm.internalCode.trim().length >= 3) ||
+    newItemStep === 2 ||
+    (newItemStep === 3 && Number.isFinite(Number(itemForm.currentQuantity)) && Number(itemForm.currentQuantity) >= 0);
 
   const folderMap = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
+  const folderTypeColorById = useMemo(
+    () => new Map(folderTypeTemplates.map((template) => [template.id, template.colorHex])),
+    [folderTypeTemplates],
+  );
   const selectedFolder = useMemo(
     () => (selectedFolderId ? folderMap.get(selectedFolderId) ?? null : null),
     [folderMap, selectedFolderId],
@@ -561,6 +705,7 @@ export function ExplorerPage() {
   }
 
   function selectFolder(folderId: string | null) {
+    setItems([]);
     setSelectedFolderId(folderId);
     setSelectedItemId(null);
     setSelectedItemIds(new Set());
@@ -573,6 +718,17 @@ export function ExplorerPage() {
   }
 
   function handleContentFolderClick(folderId: string, event: React.MouseEvent) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    if (event.detail === 2) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectFolder(folderId);
+      return;
+    }
+
     if (event.ctrlKey || event.metaKey) {
       setSelectedContentFolderIds((current) => {
         const next = new Set(current);
@@ -584,6 +740,9 @@ export function ExplorerPage() {
         return next;
       });
       setLastClickedContentFolderId(folderId);
+      setSelectedItemIds(new Set());
+      setSelectedItemId(null);
+      setLastClickedItemId(null);
     } else if (event.shiftKey && lastClickedContentFolderId) {
       const lastIndex = childFolders.findIndex((f) => f.id === lastClickedContentFolderId);
       const currentIndex = childFolders.findIndex((f) => f.id === folderId);
@@ -599,13 +758,34 @@ export function ExplorerPage() {
 
         setSelectedContentFolderIds(newSelection);
         setLastClickedContentFolderId(folderId);
+        setSelectedItemIds(new Set());
+        setSelectedItemId(null);
+        setLastClickedItemId(null);
       }
     } else {
-      selectFolder(folderId);
+      setSelectedContentFolderIds(new Set([folderId]));
+      setLastClickedContentFolderId(folderId);
+      setSelectedItemIds(new Set());
+      setSelectedItemId(null);
+      setLastClickedItemId(null);
     }
   }
 
   function handleItemClick(itemId: string, event: React.MouseEvent) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    if (event.detail === 2) {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = items.find((entry) => entry.id === itemId);
+      if (item) {
+        openEditItemModal(item);
+        return;
+      }
+    }
+
     if (event.ctrlKey || event.metaKey) {
       setSelectedItemIds((current) => {
         const next = new Set(current);
@@ -618,6 +798,8 @@ export function ExplorerPage() {
       });
       setLastClickedItemId(itemId);
       setSelectedItemId(itemId);
+      setSelectedContentFolderIds(new Set());
+      setLastClickedContentFolderId(null);
     } else if (event.shiftKey && lastClickedItemId) {
       const lastIndex = items.findIndex((item) => item.id === lastClickedItemId);
       const currentIndex = items.findIndex((item) => item.id === itemId);
@@ -633,26 +815,58 @@ export function ExplorerPage() {
 
         setSelectedItemIds(newSelection);
         setSelectedItemId(itemId);
+        setSelectedContentFolderIds(new Set());
+        setLastClickedContentFolderId(null);
       }
     } else {
       setSelectedItemIds(new Set([itemId]));
       setSelectedItemId(itemId);
       setLastClickedItemId(itemId);
+      setSelectedContentFolderIds(new Set());
+      setLastClickedContentFolderId(null);
     }
   }
 
-  function handleDragStart(entityType: "folder" | "item", id: string) {
+  function handleDragStart(entityType: "folder" | "item", id: string, event: React.DragEvent) {
     const draggedIds = entityType === "item" && selectedItemIds.has(id)
       ? Array.from(selectedItemIds)
       : [id];
 
-    setDraggedEntity({
+    const nextDraggedEntity: DragEntity = {
       entityType,
       id,
       ids: draggedIds
-    });
+    };
+
+    setDraggedEntity(nextDraggedEntity);
+    event.dataTransfer.setData("application/x-inventory-drag-entity", JSON.stringify(nextDraggedEntity));
+    event.dataTransfer.effectAllowed = "move";
     setDragOverFolderId(null);
     setDragOverContentFolderId(null);
+  }
+
+  function resolveDraggedEntity(event?: React.DragEvent): DragEntity | null {
+    if (draggedEntity) {
+      return draggedEntity;
+    }
+    if (!event) {
+      return null;
+    }
+
+    const raw = event.dataTransfer.getData("application/x-inventory-drag-entity");
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as DragEntity;
+      if (!parsed?.entityType || !parsed?.id) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
   function clearDragState() {
@@ -662,7 +876,8 @@ export function ExplorerPage() {
   }
 
   function handleContentFolderDragOver(event: React.DragEvent, folderId: string) {
-    if (draggedEntity?.entityType !== "item") {
+    const activeDraggedEntity = resolveDraggedEntity(event);
+    if (activeDraggedEntity?.entityType !== "item") {
       return;
     }
     event.preventDefault();
@@ -670,15 +885,17 @@ export function ExplorerPage() {
   }
 
   function handleContentFolderDrop(event: React.DragEvent, folderId: string) {
-    if (draggedEntity?.entityType !== "item") {
+    const activeDraggedEntity = resolveDraggedEntity(event);
+    if (activeDraggedEntity?.entityType !== "item") {
       return;
     }
     event.preventDefault();
-    void dropEntityOnFolder(folderId);
+    void dropEntityOnFolder(folderId, event);
   }
 
-  async function dropEntityOnFolder(targetFolderId: string) {
-    if (!draggedEntity) {
+  async function dropEntityOnFolder(targetFolderId: string, event?: React.DragEvent) {
+    const activeDraggedEntity = resolveDraggedEntity(event);
+    if (!activeDraggedEntity) {
       return;
     }
 
@@ -687,13 +904,13 @@ export function ExplorerPage() {
     setMessage();
 
     try {
-      if (draggedEntity.entityType === "folder") {
-        if (draggedEntity.id === targetFolderId) {
+      if (activeDraggedEntity.entityType === "folder") {
+        if (activeDraggedEntity.id === targetFolderId) {
           clearDragState();
           return;
         }
 
-        await api.post(`/v1/folders/${draggedEntity.id}/move`, {
+        await api.post(`/v1/folders/${activeDraggedEntity.id}/move`, {
           parentId: targetFolderId,
         });
 
@@ -702,7 +919,7 @@ export function ExplorerPage() {
         await loadAllItems();
         setMessage("Pasta movida com sucesso.");
       } else {
-        const itemsToMove = draggedEntity.ids || [draggedEntity.id];
+        const itemsToMove = activeDraggedEntity.ids || [activeDraggedEntity.id];
         const sourceItems = itemsToMove
           .map((id) => allItems.find((item) => item.id === id))
           .filter((item) => item !== undefined) as ItemSummary[];
@@ -736,6 +953,36 @@ export function ExplorerPage() {
     }
   }
 
+  async function dropEntityOnRoot(event?: React.DragEvent) {
+    const activeDraggedEntity = resolveDraggedEntity(event);
+    if (!activeDraggedEntity) {
+      return;
+    }
+
+    setDragOverFolderId(null);
+    setDragOverContentFolderId(null);
+    setMessage();
+
+    try {
+      if (activeDraggedEntity.entityType === "folder") {
+        await api.post(`/v1/folders/${activeDraggedEntity.id}/move`, {
+          parentId: null,
+        });
+
+        await loadFolders(activeDraggedEntity.id);
+        await loadItems(selectedFolderId);
+        await loadAllItems();
+        setMessage("Pasta movida para o nível raiz com sucesso.");
+      } else {
+        setMessage(undefined, "Itens não podem ser movidos para Todos os Arquivos.");
+      }
+    } catch {
+      setMessage(undefined, "Não foi possível mover a pasta para o nível raiz.");
+    } finally {
+      clearDragState();
+    }
+  }
+
   function openSearchResult(result: SearchResult) {
     if (result.entityType === "folder") {
       selectFolder(result.id);
@@ -762,7 +1009,7 @@ export function ExplorerPage() {
     setOptionsMenuOpen(false);
   }
 
-  function handleContextMenu(event: React.MouseEvent, entityType: "folder" | "item", entityId: string) {
+  function handleContextMenu(event: React.MouseEvent, entityType: "folder" | "item" | "content", entityId: string | null) {
     event.preventDefault();
 
     setContextMenu({
@@ -773,8 +1020,18 @@ export function ExplorerPage() {
     });
   }
 
+  function handleContentAreaContextMenu(event: React.MouseEvent) {
+    handleContextMenu(event, "content", selectedFolderId);
+  }
+
   function openNewFolderModal(parentId: string | null) {
-    setFolderForm(createFolderForm(parentId));
+    const defaultTemplateId = getDefaultFolderTemplateId();
+    const defaultTemplate = folderTypeTemplates.find((entry) => entry.id === defaultTemplateId);
+    setFolderForm({
+      ...createFolderForm(parentId),
+      folderTypeTemplateId: defaultTemplateId,
+      folderType: defaultTemplate?.baseType ?? "mixed",
+    });
     setDialogMode("new-folder");
     setContextMenu(null);
   }
@@ -794,21 +1051,118 @@ export function ExplorerPage() {
 
   function openNewItemModal(folderId: string | null) {
     setItemForm(createItemForm(folderId));
+    setPendingItemPhotos([]);
+    setNewItemStep(1);
     setDialogMode("new-item");
     setContextMenu(null);
   }
 
+  function updatePendingPhotoAtIndex(index: number, file?: File) {
+    setPendingItemPhotos((current) => {
+      const next = [...current];
+      if (!file) {
+        if (index < next.length) {
+          next.splice(index, 1);
+        }
+        return next.slice(0, 3);
+      }
+      next[index] = file;
+      return next.filter(Boolean).slice(0, 3);
+    });
+  }
+
+  function renderPendingPhotoSlots(existingCount = 0) {
+    const maxSlots = Math.max(0, 3 - existingCount);
+    if (maxSlots === 0) {
+      return <div className="text-xs text-slate-500">Limite máximo de 3 fotos atingido para este item.</div>;
+    }
+
+    const activeSlots = Math.min(maxSlots, pendingItemPhotos.length + 1);
+    return (
+      <div className="grid gap-3 sm:grid-cols-3">
+        {Array.from({ length: activeSlots }).map((_, index) => {
+          const file = pendingItemPhotos[index];
+          return (
+            <div className="rounded-xl border border-dashed border-slate-300 p-3" key={`photo-slot-${index}`}>
+              {file ? <div className="mb-2 truncate text-xs text-slate-600">{file.name}</div> : <div className="mb-2 text-xs text-slate-500">Foto {index + 1}</div>}
+              <input
+                accept="image/jpeg,image/png"
+                className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs"
+                onChange={(event) => updatePendingPhotoAtIndex(index, event.target.files?.[0])}
+                type="file"
+              />
+              {file ? (
+                <button
+                  className="mt-2 w-full rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
+                  onClick={() => updatePendingPhotoAtIndex(index)}
+                  type="button"
+                >
+                  Remover
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   function openEditItemModal(item: ItemSummary) {
     setItemForm(createItemForm(item.folderId, item));
+    setPendingItemPhotos([]);
     setSelectedItemId(item.id);
+    setExpandedEditSections({
+      identification: false,
+      fiscal: false,
+      stock: false,
+      photos: false,
+      movement: false,
+    });
+    setStockOperationForm({
+      direction: "in",
+      quantity: 1,
+      reason: "",
+      notes: "",
+    });
+    void loadItemMovements(item.id);
     setDialogMode("edit-item");
     setContextMenu(null);
   }
 
+  async function loadItemMovements(itemId: string) {
+    try {
+      const response = await api.get(`/v1/items/${itemId}/movements`);
+      setItemMovements(response.data);
+    } catch {
+      setItemMovements([]);
+    }
+  }
+
+  function toggleEditSection(section: string) {
+    setExpandedEditSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  }
+
   function openMoveItemModal(item: ItemSummary) {
     setSelectedItemId(item.id);
+    setSelectedItemIds(new Set([item.id]));
     setMoveItemFolderId(item.folderId);
     setDialogMode("move-item");
+    setContextMenu(null);
+  }
+
+  function openBulkEditItemsModal() {
+    if (selectedItemIds.size === 0) {
+      return;
+    }
+
+    setBulkEditForm({
+      description: "",
+      notes: "",
+    });
+    setDialogMode("bulk-edit-items");
     setContextMenu(null);
   }
 
@@ -824,20 +1178,34 @@ export function ExplorerPage() {
     setContextMenu(null);
   }
 
+  function openDeleteItemModal(item: ItemSummary) {
+    setSelectedItemId(item.id);
+    setDialogMode("delete-item");
+    setContextMenu(null);
+  }
+
   async function handleCreateFolder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setMessage();
 
     try {
+      // Sempre cria no contexto de navegação atual.
+      const parentIdForCreate = selectedFolderId;
       const response = await api.post("/v1/folders", {
         ...folderForm,
+        parentId: parentIdForCreate,
         folderTypeTemplateId: folderForm.folderTypeTemplateId || null,
       });
       await loadFolders(response.data.id);
       setDialogMode(null);
       setMessage(`Pasta "${response.data.name}" criada com sucesso.`);
-    } catch {
+    } catch (error) {
+      const apiError = error as { response?: { data?: { error?: { code?: string } } } };
+      if (apiError.response?.data?.error?.code === "P2002" || apiError.response?.data?.error?.code === "FOLDER_NAME_ALREADY_EXISTS") {
+        setMessage(undefined, "Já existe uma pasta com esse nome neste local.");
+        return;
+      }
       setMessage(undefined, "Não foi possível criar a pasta.");
     } finally {
       setSubmitting(false);
@@ -903,13 +1271,28 @@ export function ExplorerPage() {
         currentQuantity: Number(itemForm.currentQuantity),
         unitPrice: Number(itemForm.unitPrice),
       });
+
+      let photoUploadFailed = false;
+      if (pendingItemPhotos.length > 0) {
+        try {
+          await uploadItemPhotos(response.data.id, pendingItemPhotos, 0);
+        } catch {
+          photoUploadFailed = true;
+        }
+      }
+
       await loadItems(itemForm.folderId);
       await loadFolders(itemForm.folderId);
       await loadAllItems();
       setSelectedFolderId(itemForm.folderId);
       setSelectedItemId(response.data.id);
       setDialogMode(null);
-      setMessage(`Item "${itemForm.name}" criado com sucesso.`);
+      setPendingItemPhotos([]);
+      setMessage(
+        photoUploadFailed
+          ? `Item "${itemForm.name}" criado, mas uma ou mais fotos não foram enviadas.`
+          : `Item "${itemForm.name}" criado com sucesso.`,
+      );
     } catch {
       setMessage(undefined, "Não foi possível criar o item.");
     } finally {
@@ -936,8 +1319,13 @@ export function ExplorerPage() {
       await loadItems(itemForm.folderId);
       await loadFolders(itemForm.folderId);
       await loadAllItems();
+      const existingCount = selectedItem?.photos.length ?? 0;
+      if (pendingItemPhotos.length > 0) {
+        await uploadItemPhotos(selectedItemId, pendingItemPhotos, existingCount);
+      }
       setSelectedFolderId(itemForm.folderId);
       setDialogMode(null);
+      setPendingItemPhotos([]);
       setMessage(`Item "${itemForm.name}" atualizado com sucesso.`);
     } catch {
       setMessage(undefined, "Não foi possível atualizar o item.");
@@ -946,9 +1334,38 @@ export function ExplorerPage() {
     }
   }
 
+  async function uploadItemPhotos(itemId: string, files: File[], existingCount: number) {
+    const remainingSlots = Math.max(0, 3 - existingCount);
+    const filesToUpload = files.slice(0, remainingSlots);
+    for (const originalFile of filesToUpload) {
+      const file = await compressImageFile(originalFile);
+      const base64Data = await fileToBase64(file);
+      await api.post(`/v1/items/${itemId}/photos`, {
+        fileName: file.name,
+        mimeType: file.type,
+        base64Data,
+      });
+    }
+    await loadItems(selectedFolderId);
+    await loadAllItems();
+  }
+
+  async function handleDeleteItemPhoto(itemId: string, photoId: string) {
+    setMessage();
+    try {
+      await api.delete(`/v1/items/${itemId}/photos/${photoId}`);
+      await loadItems(selectedFolderId);
+      await loadAllItems();
+      setMessage("Foto removida com sucesso.");
+    } catch {
+      setMessage(undefined, "Não foi possível remover a foto.");
+    }
+  }
+
   async function handleMoveItem(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedItemId) {
+    const idsToMove = selectedItemIds.size > 0 ? Array.from(selectedItemIds) : selectedItemId ? [selectedItemId] : [];
+    if (idsToMove.length === 0) {
       return;
     }
 
@@ -956,18 +1373,60 @@ export function ExplorerPage() {
     setMessage();
 
     try {
-      await api.post(`/v1/items/${selectedItemId}/transfer`, {
-        destinationFolderId: moveItemFolderId,
-        reason: "Reorganizacao de estrutura",
-        notes: "Movimentado pelo explorer",
-      });
+      await Promise.all(
+        idsToMove.map((id) =>
+          api.post(`/v1/items/${id}/transfer`, {
+            destinationFolderId: moveItemFolderId,
+            reason: "Reorganizacao de estrutura",
+            notes: "Movimentado pelo explorer",
+          }),
+        ),
+      );
       await loadItems(selectedFolderId);
       await loadFolders(moveItemFolderId);
       await loadAllItems();
       setDialogMode(null);
-      setMessage("Item movido com sucesso.");
+      setSelectedItemIds(new Set());
+      setSelectedItemId(null);
+      setMessage(`${idsToMove.length} item${idsToMove.length !== 1 ? "ns" : ""} movido${idsToMove.length !== 1 ? "s" : ""} com sucesso.`);
     } catch {
       setMessage(undefined, "Não foi possível mover o item.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleBulkEditItems(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const idsToEdit = Array.from(selectedItemIds);
+    if (idsToEdit.length === 0) {
+      return;
+    }
+
+    const payload: Record<string, string> = {};
+    if (bulkEditForm.description.trim()) {
+      payload.description = bulkEditForm.description.trim();
+    }
+    if (bulkEditForm.notes.trim()) {
+      payload.notes = bulkEditForm.notes.trim();
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setMessage(undefined, "Preencha ao menos um campo para aplicar nos itens selecionados.");
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage();
+
+    try {
+      await Promise.all(idsToEdit.map((id) => api.patch(`/v1/items/${id}`, payload)));
+      await loadItems(selectedFolderId);
+      await loadAllItems();
+      setDialogMode(null);
+      setMessage(`${idsToEdit.length} item${idsToEdit.length !== 1 ? "ns" : ""} atualizado${idsToEdit.length !== 1 ? "s" : ""} com sucesso.`);
+    } catch {
+      setMessage(undefined, "Não foi possível atualizar os itens selecionados.");
     } finally {
       setSubmitting(false);
     }
@@ -991,6 +1450,47 @@ export function ExplorerPage() {
       setMessage("Saida de estoque registrada com sucesso.");
     } catch {
       setMessage(undefined, "Não foi possível registrar a saída de estoque.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleStockOperation(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedItemId) {
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage();
+    try {
+      if (stockOperationForm.direction === "in") {
+        await api.post(`/v1/items/${selectedItemId}/stock-in`, {
+          quantity: Number(stockOperationForm.quantity),
+          reason: stockOperationForm.reason,
+          notes: stockOperationForm.notes,
+        });
+      } else {
+        await api.post(`/v1/items/${selectedItemId}/stock-out`, {
+          quantity: Number(stockOperationForm.quantity),
+          reason: stockOperationForm.reason,
+          notes: stockOperationForm.notes,
+        });
+      }
+
+      await loadItems(selectedFolderId);
+      await loadFolders(selectedFolderId);
+      await loadAllItems();
+      await loadItemMovements(selectedItemId);
+      setStockOperationForm({
+        direction: "in",
+        quantity: 1,
+        reason: "",
+        notes: "",
+      });
+      setMessage("Movimentação de estoque registrada com sucesso.");
+    } catch {
+      setMessage(undefined, "Não foi possível registrar a movimentação de estoque.");
     } finally {
       setSubmitting(false);
     }
@@ -1023,10 +1523,35 @@ export function ExplorerPage() {
     } catch (error) {
       const apiError = error as { response?: { data?: { error?: { code?: string } } } };
       if (apiError.response?.data?.error?.code === "FOLDER_NOT_EMPTY") {
+        setPendingForceDeleteFolder({ id: folder.id, name: folder.name });
         setMessage(undefined, "Não foi possível excluir: a pasta ainda possui subpastas ou itens.");
         return;
       }
       setMessage(undefined, "Não foi possível excluir a pasta.");
+    }
+  }
+
+  async function handleForceDeleteFolder() {
+    if (!pendingForceDeleteFolder) {
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage();
+
+    try {
+      await api.post(`/v1/folders/${pendingForceDeleteFolder.id}/inactivate-recursive`);
+      const preferredFolderId = selectedFolderId === pendingForceDeleteFolder.id ? null : selectedFolderId;
+      await loadFolders(preferredFolderId);
+      await loadItems(preferredFolderId);
+      await loadAllItems();
+      setDialogMode(null);
+      setPendingForceDeleteFolder(null);
+      setMessage(`Pasta "${pendingForceDeleteFolder.name}" excluída com todo o conteúdo.`);
+    } catch {
+      setMessage(undefined, "Não foi possível excluir a pasta com todo o conteúdo.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -1050,7 +1575,38 @@ export function ExplorerPage() {
     }
   }
 
+  async function handleDeleteItem() {
+    if (!selectedItemId) {
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage();
+
+    try {
+      await api.post(`/v1/items/${selectedItemId}/inactivate`);
+      await loadItems(selectedFolderId);
+      await loadFolders(selectedFolderId);
+      await loadAllItems();
+      setSelectedItemId(null);
+      setSelectedItemIds(new Set());
+      setDialogMode(null);
+      setMessage("Item excluído com sucesso.");
+    } catch {
+      setMessage(undefined, "Não foi possível excluir o item.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const rootFolders = childrenByParent.get(null) ?? [];
+  const getFolderColor = (folder: FolderSummary) => folderTypeColorById.get(folder.folderTypeTemplateId ?? "") ?? undefined;
+  const getFolderColorById = (folderId: string) => {
+    const folder = folderMap.get(folderId);
+    return folder ? getFolderColor(folder) : undefined;
+  };
+  const getDefaultFolderTemplateId = () =>
+    folderTypeTemplates.find((template) => template.key === "mixed")?.id ?? folderTypeTemplates[0]?.id ?? "";
 
   return (
     <AppShell>
@@ -1059,11 +1615,24 @@ export function ExplorerPage() {
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{statusMessage}</div>
         ) : null}
         {errorMessage ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{errorMessage}</div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{errorMessage}</span>
+              {pendingForceDeleteFolder ? (
+                <button
+                  className="rounded-full border border-rose-300 bg-white px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                  onClick={() => setDialogMode("force-delete-folder")}
+                  type="button"
+                >
+                  Apagar mesmo assim
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] h-[calc(100vh-200px)]">
+      <div className="mt-5 grid h-auto min-h-0 gap-6 xl:h-[calc(100vh-200px)] xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="rounded-none border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.35)] flex flex-col">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">N A V E G A Ç Ã O</p>
@@ -1073,10 +1642,27 @@ export function ExplorerPage() {
             <div className="space-y-1">
               <button
                 className={`flex w-full items-center gap-2 rounded-xl px-2 py-1 text-sm ${
+                  dragOverFolderId === "ROOT"
+                    ? "bg-[var(--brand-primary-soft)] text-slate-900 ring-1 ring-[var(--brand-primary)]"
+                    : ""
+                } ${
                   selectedFolderId === null
                     ? "bg-[var(--brand-primary-soft)] text-slate-900"
                     : "text-slate-700 hover:bg-slate-100"
                 }`}
+                onDragLeave={() => setDragOverFolderId(null)}
+                onDragOver={(event) => {
+                  const activeDraggedEntity = resolveDraggedEntity(event);
+                  if (activeDraggedEntity?.entityType !== "folder") {
+                    return;
+                  }
+                  event.preventDefault();
+                  setDragOverFolderId("ROOT");
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  void dropEntityOnRoot(event);
+                }}
                 onClick={() => selectFolder(null)}
                 type="button"
               >
@@ -1098,15 +1684,16 @@ export function ExplorerPage() {
                   onSelect={selectFolder}
                   onToggle={toggleFolder}
                   selectedFolderId={selectedFolderId}
+                  getFolderColor={getFolderColor}
                 />
               ))}
             </div>
           </div>
         </aside>
 
-        <section className="space-y-5 overflow-y-auto flex flex-col">
+        <section className="flex min-h-0 flex-col space-y-5 overflow-visible">
           <article className="rounded-none border border-slate-200 bg-white p-5 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.25)]">
-            <form className="relative" onSubmit={handleSearchSubmit}>
+            <form className="relative z-40" onSubmit={handleSearchSubmit}>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   className="h-10 min-w-[220px] flex-1 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-[var(--brand-primary)]"
@@ -1137,7 +1724,7 @@ export function ExplorerPage() {
               </div>
 
               {searchQuery.trim() && !submittedSearchQuery ? (
-                <div className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-xl">
+                <div className="absolute left-0 z-[80] mt-2 max-h-72 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-xl">
                   {searchSuggestions.length > 0 ? (
                     searchSuggestions.map((result) => (
                       <button
@@ -1147,7 +1734,7 @@ export function ExplorerPage() {
                         type="button"
                       >
                         {result.entityType === "folder" ? (
-                          <FolderIcon className="mt-0.5 h-4 w-4 text-amber-500" />
+                          <FolderIcon className="mt-0.5 h-4 w-4 text-amber-500" color={getFolderColorById(result.id)} />
                         ) : (
                           <FileIcon className="mt-0.5 h-4 w-4 text-sky-600" />
                         )}
@@ -1180,7 +1767,7 @@ export function ExplorerPage() {
                       type="button"
                     >
                       {result.entityType === "folder" ? (
-                        <FolderIcon className="mt-0.5 h-5 w-5 text-amber-500" />
+                        <FolderIcon className="mt-0.5 h-5 w-5 text-amber-500" color={getFolderColorById(result.id)} />
                       ) : (
                         <FileIcon className="mt-0.5 h-5 w-5 text-sky-600" />
                       )}
@@ -1219,7 +1806,7 @@ export function ExplorerPage() {
                         {selectedItemIds.size === 1 ? "1 item selecionado" : `${selectedItemIds.size} itens selecionados`}
                       </div>
                     )}
-                    <div className="relative" ref={optionsMenuRef}>
+                    <div className="relative z-40" ref={optionsMenuRef}>
                       <button
                         className="rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
                         onClick={() => setOptionsMenuOpen((current) => !current)}
@@ -1229,7 +1816,7 @@ export function ExplorerPage() {
                       </button>
 
                     {optionsMenuOpen ? (
-                      <div className="absolute right-0 top-11 z-30 w-52 border border-slate-200 bg-white p-2 shadow-lg">
+                      <div className="absolute left-0 top-11 z-[80] w-full min-w-52 border border-slate-200 bg-white p-2 shadow-lg sm:left-auto sm:right-0 sm:w-52">
                         <div className="px-2 pb-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Visualizacao</div>
                         <button
                           className={`block w-full rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100 ${viewMode === "list" ? "text-[var(--brand-primary-strong)]" : ""}`}
@@ -1281,6 +1868,16 @@ export function ExplorerPage() {
                             <button
                               className="block w-full rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100"
                               onClick={() => {
+                                openBulkEditItemsModal();
+                                setOptionsMenuOpen(false);
+                              }}
+                              type="button"
+                            >
+                              Editar {selectedItemIds.size} {selectedItemIds.size === 1 ? "item" : "itens"}
+                            </button>
+                            <button
+                              className="block w-full rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100"
+                              onClick={() => {
                                 setDialogMode("move-item");
                                 setOptionsMenuOpen(false);
                               }}
@@ -1313,7 +1910,7 @@ export function ExplorerPage() {
               </div>
 
               {viewMode === "list" ? (
-              <div className="overflow-x-auto flex-1">
+              <div className="flex-1 overflow-auto" onContextMenu={handleContentAreaContextMenu}>
                 <table className="min-w-full text-sm">
                   <thead className="border-b border-slate-200 bg-white">
                     <tr className="text-left text-slate-500">
@@ -1338,16 +1935,27 @@ export function ExplorerPage() {
                         onDragLeave={() => setDragOverContentFolderId(null)}
                         onDragOver={(event) => handleContentFolderDragOver(event, folder.id)}
                         onDrop={(event) => handleContentFolderDrop(event, folder.id)}
-                        onDoubleClick={() => selectFolder(folder.id)}
+                        onDoubleClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          selectFolder(folder.id);
+                        }}
                         draggable
                         onDragEnd={clearDragState}
-                        onDragStart={() => handleDragStart("folder", folder.id)}
+                        onDragStart={(event) => handleDragStart("folder", folder.id, event)}
+                        onMouseDown={(event) => {
+                          if (event.button === 0 && event.detail === 2) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            selectFolder(folder.id);
+                          }
+                        }}
                       >
                         <td className="px-5 py-3">
-                          <button className="flex items-center gap-3 text-left" onClick={() => selectFolder(folder.id)} type="button">
-                            <FolderIcon className="h-5 w-5 text-amber-500" />
+                          <div className="flex items-center gap-3 text-left">
+                            <FolderIcon className="h-5 w-5 text-amber-500" color={getFolderColor(folder)} />
                             <span className="font-medium">{folder.name}</span>
-                          </button>
+                          </div>
                         </td>
                         <td className="px-5 py-3 text-slate-500">Pasta</td>
                         <td className="px-5 py-3 text-slate-500">
@@ -1367,11 +1975,22 @@ export function ExplorerPage() {
                         className={`border-b border-slate-100 ${selectedItemIds.has(item.id) ? "bg-[var(--brand-primary-soft)]/70" : "hover:bg-slate-50"}`}
                         key={item.id}
                         onContextMenu={(event) => handleContextMenu(event, "item", item.id)}
-                        onDoubleClick={() => openEditItemModal(item)}
+                        onDoubleClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openEditItemModal(item);
+                        }}
                         onClick={(event) => handleItemClick(item.id, event)}
                         draggable
                         onDragEnd={clearDragState}
-                        onDragStart={() => handleDragStart("item", item.id)}
+                        onDragStart={(event) => handleDragStart("item", item.id, event)}
+                        onMouseDown={(event) => {
+                          if (event.button === 0 && event.detail === 2) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openEditItemModal(item);
+                          }
+                        }}
                       >
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-3 text-left">
@@ -1395,6 +2014,9 @@ export function ExplorerPage() {
                             <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); openMoveItemModal(item); }} type="button">
                               Mover
                             </button>
+                            <button className="rounded-full border border-rose-200 px-3 py-1 text-xs text-rose-600 hover:bg-rose-50" onClick={(e) => { e.stopPropagation(); openDeleteItemModal(item); }} type="button">
+                              Excluir
+                            </button>
                             {item.type === "stock" ? (
                               <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); openStockOutModal(item); }} type="button">
                                 Saida
@@ -1416,7 +2038,7 @@ export function ExplorerPage() {
                 </table>
               </div>
             ) : (
-            <div className="p-5 flex-1 overflow-auto">
+            <div className="p-5 flex-1 overflow-auto" onContextMenu={handleContentAreaContextMenu}>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {childFolders.map((folder) => (
                   <button
@@ -1430,15 +2052,26 @@ export function ExplorerPage() {
                     onDragLeave={() => setDragOverContentFolderId(null)}
                     onDragOver={(event) => handleContentFolderDragOver(event, folder.id)}
                     onDrop={(event) => handleContentFolderDrop(event, folder.id)}
-                    onDoubleClick={() => selectFolder(folder.id)}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      selectFolder(folder.id);
+                    }}
                     onContextMenu={(event) => handleContextMenu(event, "folder", folder.id)}
                     draggable
                     onDragEnd={clearDragState}
-                    onDragStart={() => handleDragStart("folder", folder.id)}
+                    onDragStart={(event) => handleDragStart("folder", folder.id, event)}
+                    onMouseDown={(event) => {
+                      if (event.button === 0 && event.detail === 2) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        selectFolder(folder.id);
+                      }
+                    }}
                     type="button"
                   >
                     <div className="flex items-center gap-3">
-                      <FolderIcon className="h-10 w-10 text-amber-500" />
+                      <FolderIcon className="h-10 w-10 text-amber-500" color={getFolderColor(folder)} />
                       <div>
                         <div className="font-semibold">{folder.name}</div>
                         <div className="text-xs text-slate-500">{folder.folderTypeLabel ?? folder.folderType}</div>
@@ -1453,15 +2086,30 @@ export function ExplorerPage() {
                     className={`rounded-none border p-5 text-left ${selectedItemIds.has(item.id) ? "border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]/60" : "border-slate-200 bg-white hover:bg-slate-50 hover:border-[var(--brand-primary)]/40"}`}
                     key={item.id}
                     onClick={(event) => handleItemClick(item.id, event)}
-                    onDoubleClick={() => openEditItemModal(item)}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openEditItemModal(item);
+                    }}
                     onContextMenu={(event) => handleContextMenu(event, "item", item.id)}
                     draggable
                     onDragEnd={clearDragState}
-                    onDragStart={() => handleDragStart("item", item.id)}
+                    onDragStart={(event) => handleDragStart("item", item.id, event)}
+                    onMouseDown={(event) => {
+                      if (event.button === 0 && event.detail === 2) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openEditItemModal(item);
+                      }
+                    }}
                     type="button"
                   >
                     <div className="flex items-center gap-3">
-                      <FileIcon className="h-10 w-10 text-sky-600" />
+                      {item.photos.length > 0 ? (
+                        <img alt={item.photos[0].fileName} className="h-10 w-10 rounded-md object-cover" src={item.photos[0].url} />
+                      ) : (
+                        <FileIcon className="h-10 w-10 text-sky-600" />
+                      )}
                       <div>
                         <div className="font-semibold">{item.name}</div>
                         <div className="text-xs text-slate-500">{item.internalCode}</div>
@@ -1469,6 +2117,17 @@ export function ExplorerPage() {
                     </div>
                     <div className="mt-4 text-sm text-slate-500">
                       {item.type} • Qtd {item.currentQuantity} • R$ {Number(item.totalValue).toFixed(2)}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); openEditItemModal(item); }} type="button">
+                        Editar
+                      </button>
+                      <button className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); openMoveItemModal(item); }} type="button">
+                        Mover
+                      </button>
+                      <button className="rounded-full border border-rose-200 px-3 py-1 text-xs text-rose-600 hover:bg-rose-50" onClick={(event) => { event.stopPropagation(); openDeleteItemModal(item); }} type="button">
+                        Excluir
+                      </button>
                     </div>
                   </button>
                 ))}
@@ -1489,12 +2148,15 @@ export function ExplorerPage() {
         >
           {contextMenu.entityType === "folder" ? (
             <>
-              <button className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100" onClick={() => openNewFolderModal(contextMenu.entityId)} type="button">
+              <button className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100" onClick={() => openNewFolderModal(contextMenu.entityId ?? null)} type="button">
                 Criar subpasta
               </button>
               <button
                 className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
                 onClick={() => {
+                  if (!contextMenu.entityId) {
+                    return;
+                  }
                   const folder = folderMap.get(contextMenu.entityId);
                   if (folder) {
                     openEditFolderModal(folder);
@@ -1507,6 +2169,9 @@ export function ExplorerPage() {
               <button
                 className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
                 onClick={() => {
+                  if (!contextMenu.entityId) {
+                    return;
+                  }
                   const folder = folderMap.get(contextMenu.entityId);
                   if (folder) {
                     openMoveFolderModal(folder);
@@ -1519,14 +2184,16 @@ export function ExplorerPage() {
               <button
                 className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
                 onClick={() => {
-                  void handleDeleteFolder(contextMenu.entityId);
+                  if (contextMenu.entityId) {
+                    void handleDeleteFolder(contextMenu.entityId);
+                  }
                 }}
                 type="button"
               >
                 Excluir pasta
               </button>
             </>
-          ) : (
+          ) : contextMenu.entityType === "item" ? (
             <>
               <button
                 className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
@@ -1564,6 +2231,80 @@ export function ExplorerPage() {
               >
                 Saida de estoque
               </button>
+              <button
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                onClick={() => {
+                  const item = items.find((entry) => entry.id === contextMenu.entityId);
+                  if (item) {
+                    openDeleteItemModal(item);
+                  }
+                }}
+                type="button"
+              >
+                Excluir item
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
+                onClick={() => openNewFolderModal(contextMenu.entityId)}
+                type="button"
+              >
+                {contextMenu.entityId ? "Criar subpasta" : "Criar pasta raiz"}
+              </button>
+              <button
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                disabled={!contextMenu.entityId}
+                onClick={() => {
+                  if (contextMenu.entityId) {
+                    openNewItemModal(contextMenu.entityId);
+                  }
+                }}
+                type="button"
+              >
+                Novo item
+              </button>
+              {contextMenu.entityId ? (
+                <>
+                  <div className="my-1 border-t border-slate-100" />
+                  <button
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
+                    onClick={() => {
+                      const folder = folderMap.get(contextMenu.entityId ?? "");
+                      if (folder) {
+                        openEditFolderModal(folder);
+                      }
+                    }}
+                    type="button"
+                  >
+                    Editar pasta atual
+                  </button>
+                  <button
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
+                    onClick={() => {
+                      const folder = folderMap.get(contextMenu.entityId ?? "");
+                      if (folder) {
+                        openMoveFolderModal(folder);
+                      }
+                    }}
+                    type="button"
+                  >
+                    Mover pasta atual
+                  </button>
+                  <button
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                    onClick={() => {
+                      if (contextMenu.entityId) {
+                        void handleDeleteFolder(contextMenu.entityId);
+                      }
+                    }}
+                    type="button"
+                  >
+                    Excluir pasta atual
+                  </button>
+                </>
+              ) : null}
             </>
           )}
         </div>
@@ -1586,13 +2327,13 @@ export function ExplorerPage() {
                     const template = folderTypeTemplates.find((entry) => entry.id === event.target.value);
                     setFolderForm((current) => ({
                       ...current,
-                      folderTypeTemplateId: event.target.value || "",
+                      folderTypeTemplateId: event.target.value,
                       folderType: template?.baseType ?? current.folderType,
                     }));
                   }}
+                  required
                   value={folderForm.folderTypeTemplateId}
                 >
-                  <option value="">Sem tipo personalizado</option>
                   {folderTypeTemplates.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
@@ -1633,13 +2374,12 @@ export function ExplorerPage() {
                     const template = folderTypeTemplates.find((entry) => entry.id === event.target.value);
                     setFolderForm((current) => ({
                       ...current,
-                      folderTypeTemplateId: event.target.value || "",
+                      folderTypeTemplateId: event.target.value,
                       folderType: template?.baseType ?? current.folderType,
                     }));
                   }}
                   value={folderForm.folderTypeTemplateId}
                 >
-                  <option value="">Sem tipo personalizado</option>
                   {folderTypeTemplates.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
@@ -1693,77 +2433,273 @@ export function ExplorerPage() {
           onClose={() => setDialogMode(null)}
           title={dialogMode === "new-item" ? "Novo item" : "Editar item"}
         >
-          <form className="space-y-4" onSubmit={dialogMode === "new-item" ? handleCreateItem : handleEditItem}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Nome</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} required value={itemForm.name} />
-              </label>
+          {dialogMode === "new-item" ? (
+            <form className="space-y-4" onSubmit={handleCreateItem}>
+              <p className="text-xs text-slate-500">Os campos com * são obrigatórios.</p>
+              <div className="space-y-2">
+                <div className="mb-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Etapa {newItemStep} de 3</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map((step) => (
+                    <div key={step}>
+                      <div className={`h-2 w-full rounded-full ${step <= newItemStep ? "bg-[var(--brand-primary)]" : "bg-slate-200"}`} />
+                      <div className={`mt-1 text-center text-[11px] ${step === newItemStep ? "text-slate-800" : "text-slate-500"}`}>
+                        {step === 1 ? "Dados" : step === 2 ? "Notas" : "Estoque"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Tipo</span>
-                <select className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, type: event.target.value as ItemType }))} value={itemForm.type}>
-                  <option value="stock">Estoque</option>
-                  <option value="asset">Patrimonio</option>
-                </select>
-              </label>
+              {newItemStep === 1 ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium">Nome *</span>
+                      <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} required value={itemForm.name} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium">Tipo *</span>
+                      <select className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, type: event.target.value as ItemType }))} required value={itemForm.type}>
+                        <option value="stock">Estoque</option>
+                        <option value="asset">Patrimônio</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium">Código interno *</span>
+                      <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, internalCode: event.target.value }))} required value={itemForm.internalCode} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium">Código de barras</span>
+                      <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, barcode: event.target.value }))} value={itemForm.barcode} />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium">Descrição</span>
+                    <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} value={itemForm.description} />
+                  </label>
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">Foto</div>
+                    <div className="text-xs text-slate-500">Formatos permitidos: PNG, JPG e JPEG. Tamanho máximo: 5 MB por arquivo.</div>
+                    {pendingItemPhotos.length > 0 ? <div className="text-xs text-slate-500">{pendingItemPhotos.length} foto(s) pronta(s) para envio.</div> : null}
+                    {renderPendingPhotoSlots(0)}
+                  </div>
+                </div>
+              ) : null}
+
+              {newItemStep === 2 ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium">Números de Notas Fiscais</span>
+                  <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, notes: event.target.value }))} value={itemForm.notes} />
+                </label>
+              ) : null}
+
+              {newItemStep === 3 ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium">Estoque Inicial *</span>
+                    <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, currentQuantity: event.target.value }))} required type="number" value={itemForm.currentQuantity} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium">Estoque mínimo</span>
+                    <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, minStock: event.target.value }))} type="number" value={itemForm.minStock} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium">Preço unitário</span>
+                    <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, unitPrice: event.target.value }))} step="0.01" type="number" value={itemForm.unitPrice} />
+                  </label>
+                </div>
+              ) : null}
+
+              <div className="flex justify-between">
+                <button className="rounded-full border border-slate-200 px-5 py-2 text-sm" disabled={newItemStep === 1} onClick={() => setNewItemStep((current) => Math.max(1, current - 1))} type="button">
+                  Voltar
+                </button>
+                {newItemStep < 3 ? (
+                  <button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white disabled:opacity-50" disabled={!newItemStepValid} onClick={() => setNewItemStep((current) => Math.min(3, current + 1))} type="button">
+                    Próximo
+                  </button>
+                ) : (
+                  <button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white disabled:opacity-50" disabled={submitting || !newItemStepValid} type="submit">
+                    {submitting ? "Salvando..." : "Criar item"}
+                  </button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { key: "identification", label: "Identificação" },
+                { key: "fiscal", label: "Números de Notas Fiscais" },
+                { key: "stock", label: "Estoque" },
+                { key: "photos", label: "Fotos" },
+                { key: "movement", label: "Entrada e Saída de Estoque" },
+              ].map((section) => (
+                <div className="rounded-xl border border-slate-200" key={section.key}>
+                  <button className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium" onClick={() => toggleEditSection(section.key)} type="button">
+                    <span>{section.label}</span>
+                    <span>{expandedEditSections[section.key] ? "-" : "+"}</span>
+                  </button>
+                  {expandedEditSections[section.key] ? (
+                    <div className="border-t border-slate-200 p-4">
+                      {section.key === "identification" ? (
+                        <form className="space-y-4" onSubmit={handleEditItem}>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Nome</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} required value={itemForm.name} /></label>
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Tipo</span><select className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, type: event.target.value as ItemType }))} required value={itemForm.type}><option value="stock">Estoque</option><option value="asset">Patrimônio</option></select></label>
+                          </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Código interno</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, internalCode: event.target.value }))} required value={itemForm.internalCode} /></label>
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Código de barras</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, barcode: event.target.value }))} value={itemForm.barcode} /></label>
+                          </div>
+                          <label className="block"><span className="mb-2 block text-sm font-medium">Descrição</span><textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} value={itemForm.description} /></label>
+                          <div className="flex justify-end"><button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">{submitting ? "Salvando..." : "Salvar identificação"}</button></div>
+                        </form>
+                      ) : null}
+
+                      {section.key === "fiscal" ? (
+                        <form className="space-y-4" onSubmit={handleEditItem}>
+                          <label className="block"><span className="mb-2 block text-sm font-medium">Números de Notas Fiscais</span><textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, notes: event.target.value }))} value={itemForm.notes} /></label>
+                          <div className="flex justify-end"><button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">{submitting ? "Salvando..." : "Salvar notas fiscais"}</button></div>
+                        </form>
+                      ) : null}
+
+                      {section.key === "stock" ? (
+                        <form className="space-y-4" onSubmit={handleEditItem}>
+                          <div className="grid gap-4 md:grid-cols-3">
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Estoque Inicial</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, currentQuantity: event.target.value }))} required type="number" value={itemForm.currentQuantity} /></label>
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Estoque mínimo</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, minStock: event.target.value }))} type="number" value={itemForm.minStock} /></label>
+                            <label className="block"><span className="mb-2 block text-sm font-medium">Preço unitário</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, unitPrice: event.target.value }))} step="0.01" type="number" value={itemForm.unitPrice} /></label>
+                          </div>
+                          <div className="flex justify-end"><button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">{submitting ? "Salvando..." : "Salvar estoque"}</button></div>
+                        </form>
+                      ) : null}
+
+                      {section.key === "photos" ? (
+                        <div className="space-y-3">
+                          {selectedItem && selectedItem.photos.length > 0 ? (
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              {selectedItem.photos.map((photo) => (
+                                <div className="rounded-xl border border-slate-200 p-2" key={photo.id}>
+                                  <button
+                                    className="w-full"
+                                    onClick={() =>
+                                      setExpandedPhoto({
+                                        photos: selectedItem.photos.map((entry) => ({
+                                          url: entry.url,
+                                          fileName: entry.fileName,
+                                        })),
+                                        index: selectedItem.photos.findIndex((entry) => entry.id === photo.id),
+                                      })
+                                    }
+                                    type="button"
+                                  >
+                                    <img alt={photo.fileName} className="h-24 w-full rounded-md object-cover" src={photo.url} />
+                                  </button>
+                                  <div className="mt-2 flex items-center justify-between gap-2">
+                                    <span className="truncate text-xs text-slate-500">{photo.fileName}</span>
+                                    <button className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50" onClick={() => { if (selectedItem) { void handleDeleteItemPhoto(selectedItem.id, photo.id); } }} type="button">Excluir</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {pendingItemPhotos.length > 0 ? <div className="text-xs text-slate-500">{pendingItemPhotos.length} foto(s) pronta(s) para envio.</div> : null}
+                          <div className="text-xs text-slate-500">Formatos permitidos: PNG, JPG e JPEG. Tamanho máximo: 5 MB por arquivo.</div>
+                          {renderPendingPhotoSlots(selectedItem?.photos.length ?? 0)}
+                          <div className="flex justify-end">
+                            <button
+                              className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white"
+                              disabled={submitting || pendingItemPhotos.length === 0 || !selectedItem}
+                              onClick={async () => {
+                                if (!selectedItem) return;
+                                setSubmitting(true);
+                                try {
+                                  await uploadItemPhotos(selectedItem.id, pendingItemPhotos, selectedItem.photos.length);
+                                  setPendingItemPhotos([]);
+                                  setMessage("Fotos enviadas com sucesso.");
+                                } catch {
+                                  setMessage(undefined, "Não foi possível enviar as fotos.");
+                                } finally {
+                                  setSubmitting(false);
+                                }
+                              }}
+                              type="button"
+                            >
+                              Enviar fotos
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {section.key === "movement" ? (
+                        <div className="space-y-4">
+                          <form className="grid gap-3 md:grid-cols-4" onSubmit={handleStockOperation}>
+                            <select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setStockOperationForm((current) => ({ ...current, direction: event.target.value as "in" | "out" }))} value={stockOperationForm.direction}>
+                              <option value="in">Entrada</option>
+                              <option value="out">Saída</option>
+                            </select>
+                            <input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setStockOperationForm((current) => ({ ...current, quantity: Number(event.target.value) }))} placeholder="Quantidade" type="number" value={stockOperationForm.quantity} />
+                            <input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setStockOperationForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Motivo" required value={stockOperationForm.reason} />
+                            <button className="rounded-full bg-[var(--brand-primary)] px-4 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">{submitting ? "Registrando..." : "Registrar"}</button>
+                            <textarea className="md:col-span-4 min-h-20 rounded-2xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setStockOperationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações" value={stockOperationForm.notes} />
+                          </form>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="border-b border-slate-200 text-left text-slate-500">
+                                <tr>
+                                  <th className="px-2 py-2">Tipo</th>
+                                  <th className="px-2 py-2">Quantidade</th>
+                                  <th className="px-2 py-2">Motivo</th>
+                                  <th className="px-2 py-2">Data/Hora</th>
+                                  <th className="px-2 py-2">Usuário</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {itemMovements.map((movement) => (
+                                  <tr className="border-b border-slate-100" key={movement.id}>
+                                    <td className="px-2 py-2">{movement.movementType === "stock_in" ? "Entrada" : movement.movementType === "stock_out" ? "Saída" : movement.movementType}</td>
+                                    <td className="px-2 py-2">{movement.quantity}</td>
+                                    <td className="px-2 py-2">{movement.reason}</td>
+                                    <td className="px-2 py-2">{formatDateTime(movement.createdAt)}</td>
+                                    <td className="px-2 py-2">{movement.performedBy?.name ?? movement.performedBy?.email ?? "Sistema"}</td>
+                                  </tr>
+                                ))}
+                                {itemMovements.length === 0 ? (
+                                  <tr>
+                                    <td className="px-2 py-4 text-center text-slate-500" colSpan={5}>Sem movimentações registradas.</td>
+                                  </tr>
+                                ) : null}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Codigo interno</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, internalCode: event.target.value }))} required value={itemForm.internalCode} />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Codigo de barras</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, barcode: event.target.value }))} value={itemForm.barcode} />
-              </label>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Quantidade</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, currentQuantity: Number(event.target.value) }))} type="number" value={itemForm.currentQuantity} />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Estoque minimo</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, minStock: Number(event.target.value) }))} type="number" value={itemForm.minStock} />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium">Preco unitario</span>
-                <input className="w-full rounded-2xl border border-slate-200 px-4 py-3" min={0} onChange={(event) => setItemForm((current) => ({ ...current, unitPrice: Number(event.target.value) }))} step="0.01" type="number" value={itemForm.unitPrice} />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium">Descrição</span>
-              <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} value={itemForm.description} />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium">Notas</span>
-              <textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setItemForm((current) => ({ ...current, notes: event.target.value }))} value={itemForm.notes} />
-            </label>
-
-            <div className="flex justify-end">
-              <button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">
-                {submitting ? "Salvando..." : dialogMode === "new-item" ? "Criar item" : "Atualizar item"}
-              </button>
-            </div>
-          </form>
+          )}
         </Modal>
       ) : null}
 
-      {dialogMode === "move-item" && selectedItem ? (
-        <Modal description={`Escolha a pasta de destino para ${selectedItem.name}.`} onClose={() => setDialogMode(null)} title="Mover item">
+      {dialogMode === "move-item" && (selectedItem || selectedItemIds.size > 0) ? (
+        <Modal
+          description={
+            selectedItemIds.size > 1
+              ? `Escolha a pasta de destino para ${selectedItemIds.size} itens selecionados.`
+              : `Escolha a pasta de destino para ${selectedItem?.name ?? "o item selecionado"}.`
+          }
+          onClose={() => setDialogMode(null)}
+          title={selectedItemIds.size > 1 ? "Mover itens" : "Mover item"}
+        >
           <form className="space-y-4" onSubmit={handleMoveItem}>
             <label className="block">
               <span className="mb-2 block text-sm font-medium">Destino</span>
               <select className="w-full rounded-2xl border border-slate-200 px-4 py-3" onChange={(event) => setMoveItemFolderId(event.target.value)} value={moveItemFolderId}>
-                {moveItemOptions.map((folder) => (
+                {(selectedItemIds.size > 1 ? folders : moveItemOptions).map((folder) => (
                   <option key={folder.id} value={folder.id}>
                     {folder.name}
                   </option>
@@ -1773,7 +2709,41 @@ export function ExplorerPage() {
 
             <div className="flex justify-end">
               <button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting || !moveItemFolderId} type="submit">
-                {submitting ? "Movendo..." : "Mover item"}
+                {submitting ? "Movendo..." : selectedItemIds.size > 1 ? "Mover itens" : "Mover item"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {dialogMode === "bulk-edit-items" ? (
+        <Modal
+          description={`Aplique os mesmos campos para ${selectedItemIds.size} itens selecionados. Campos vazios não serão alterados.`}
+          onClose={() => setDialogMode(null)}
+          title="Editar itens em massa"
+        >
+          <form className="space-y-4" onSubmit={handleBulkEditItems}>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium">Descrição</span>
+              <textarea
+                className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3"
+                onChange={(event) => setBulkEditForm((current) => ({ ...current, description: event.target.value }))}
+                value={bulkEditForm.description}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium">Notas</span>
+              <textarea
+                className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3"
+                onChange={(event) => setBulkEditForm((current) => ({ ...current, notes: event.target.value }))}
+                value={bulkEditForm.notes}
+              />
+            </label>
+
+            <div className="flex justify-end">
+              <button className="rounded-full bg-[var(--brand-primary)] px-5 py-2 text-sm font-medium text-white" disabled={submitting} type="submit">
+                {submitting ? "Salvando..." : `Atualizar ${selectedItemIds.size} ${selectedItemIds.size === 1 ? "item" : "itens"}`}
               </button>
             </div>
           </form>
@@ -1806,6 +2776,107 @@ export function ExplorerPage() {
             </div>
           </form>
         </Modal>
+      ) : null}
+
+      {dialogMode === "delete-item" && selectedItem ? (
+        <Modal description={`Confirme a exclusão do item ${selectedItem.name}. Esta ação é irreversível.`} onClose={() => setDialogMode(null)} title="Excluir item">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">Este item será removido do Explorer e não poderá ser recuperado por esta interface.</p>
+            <div className="flex justify-end gap-2">
+              <button className="rounded-full border border-slate-200 px-5 py-2 text-sm" onClick={() => setDialogMode(null)} type="button">
+                Cancelar
+              </button>
+              <button className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700" disabled={submitting} onClick={() => { void handleDeleteItem(); }} type="button">
+                {submitting ? "Excluindo..." : "Excluir"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {dialogMode === "force-delete-folder" && pendingForceDeleteFolder ? (
+        <Modal
+          description={`Você está prestes a excluir a pasta ${pendingForceDeleteFolder.name} com todas as subpastas e itens.`}
+          onClose={() => setDialogMode(null)}
+          title="Confirmar exclusão completa"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">Essa ação é irreversível. Tem certeza que deseja continuar?</p>
+            <div className="flex justify-end gap-2">
+              <button className="rounded-full border border-slate-200 px-5 py-2 text-sm" onClick={() => setDialogMode(null)} type="button">
+                Cancelar
+              </button>
+              <button
+                className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
+                disabled={submitting}
+                onClick={() => {
+                  void handleForceDeleteFolder();
+                }}
+                type="button"
+              >
+                {submitting ? "Excluindo..." : "Excluir tudo"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {expandedPhoto ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4"
+          onClick={() => setExpandedPhoto(null)}
+          role="presentation"
+        >
+          <div className="max-h-[90vh] max-w-[90vw]" onClick={(event) => event.stopPropagation()} role="presentation">
+            <img
+              alt={expandedPhoto.photos[expandedPhoto.index]?.fileName ?? "Foto"}
+              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain"
+              src={expandedPhoto.photos[expandedPhoto.index]?.url}
+            />
+            <div className="mt-2 flex items-center justify-center gap-3">
+              <button
+                className="rounded-full border border-slate-400 px-3 py-1 text-xs text-slate-100 hover:bg-slate-800"
+                disabled={expandedPhoto.index <= 0}
+                onClick={() =>
+                  setExpandedPhoto((current) =>
+                    current
+                      ? {
+                          ...current,
+                          index: Math.max(0, current.index - 1),
+                        }
+                      : current,
+                  )
+                }
+                type="button"
+              >
+                Anterior
+              </button>
+              <div className="text-center text-xs text-slate-200">
+                {expandedPhoto.photos[expandedPhoto.index]?.fileName}
+                <div className="text-[11px] text-slate-400">
+                  {expandedPhoto.index + 1} de {expandedPhoto.photos.length}
+                </div>
+              </div>
+              <button
+                className="rounded-full border border-slate-400 px-3 py-1 text-xs text-slate-100 hover:bg-slate-800"
+                disabled={expandedPhoto.index >= expandedPhoto.photos.length - 1}
+                onClick={() =>
+                  setExpandedPhoto((current) =>
+                    current
+                      ? {
+                          ...current,
+                          index: Math.min(current.photos.length - 1, current.index + 1),
+                        }
+                      : current,
+                  )
+                }
+                type="button"
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </AppShell>
   );

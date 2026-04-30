@@ -23,7 +23,10 @@ export function AppShell({ children }: PropsWithChildren) {
                 Explorer
               </NavLink>
               <NavLink className="rounded-full px-4 py-2 hover:bg-slate-100" to="/settings">
-                Configuração
+                Configurações
+              </NavLink>
+              <NavLink className="rounded-full px-4 py-2 hover:bg-slate-100" to="/history">
+                Histórico de Modificações
               </NavLink>
             </nav>
 
