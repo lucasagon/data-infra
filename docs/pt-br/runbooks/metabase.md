@@ -1,7 +1,7 @@
 # Runbook: Metabase
 
 **Container:** `metabase` | **Porta:** `3000`
-**Compose:** `/root/data/docker-compose.yml`
+**Compose:** `data/docker-compose.yml`
 **Banco:** `metabase-db` via PgBouncer (`pgbouncer:6432`)
 
 ---
@@ -25,7 +25,7 @@ curl -s http://localhost:3000/api/health
 docker restart metabase
 
 # Recriar (aplica mudanças no compose/env)
-cd /root/data && docker compose up -d --force-recreate metabase
+cd data && docker compose up -d --force-recreate metabase
 ```
 
 ---

@@ -76,7 +76,7 @@ n8n:
 ### 3. Restart do container
 
 ```bash
-cd /root/data && docker compose up -d --force-recreate n8n
+cd data && docker compose up -d --force-recreate n8n
 ```
 
 ---
@@ -104,7 +104,7 @@ docker exec postgres psql -U postgres -d n8n -c "\dt" | head -20
 docker cp ./n8n_backup_YYYYMMDD_HHMMSS.sqlite n8n:/home/node/.n8n/database.sqlite
 
 # Remover variáveis de banco do docker-compose.yml e recriar
-cd /root/data && docker compose up -d --force-recreate n8n
+cd data && docker compose up -d --force-recreate n8n
 ```
 
 ---

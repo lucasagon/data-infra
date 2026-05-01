@@ -2,37 +2,36 @@
 
 **Data:** 2026-03-16
 **Status:** ✅ Resolvido
-**Contexto:** Após deploy do PgBouncer, a variável `N8N_WEBHOOK_URL` foi adicionada ao compose com o protocolo incluso
+**Contexto:** Após reorganizar o compose, a variável `N8N_WEBHOOK_URL` passou a ser preenchida manualmente no `.env`
 
 ---
 
 ## Sintoma
 
-Ao abrir um nó de Webhook no n8n, a URL exibida aparece com o protocolo duplicado:
+Ao abrir um nó de Webhook no n8n, a URL exibida aparecia com o protocolo duplicado:
 
-```
-https://https://automacoes.vivaceengenharia.com/webhook-test/4ba2d77f-ee41-4c5a-95f8-fb4fe4c7ac8a
+```text
+https://https://automacoes.exemplo.com/webhook-test/<uuid>
 ```
 
-O webhook não funciona — qualquer cliente externo que tente chamar essa URL recebe erro de DNS/conexão, pois a URL é inválida.
+Nesse estado, o webhook não funciona. A URL fica inválida e qualquer cliente externo recebe erro de DNS ou conexão.
 
 ---
 
 ## Causa
 
-O n8n monta a URL pública do webhook concatenando internamente o protocolo `https://` com o valor de `N8N_WEBHOOK_URL`. Quando o valor já contém `https://`, o resultado é a duplicação.
+Na versão usada neste ambiente, o n8n já concatenava `https://` internamente ao montar a URL pública. Quando `N8N_WEBHOOK_URL` foi preenchida com o protocolo incluído, o resultado final ficou duplicado.
 
-```
-N8N_WEBHOOK_URL = "https://automacoes.vivaceengenharia.com"
+```text
+N8N_WEBHOOK_URL = "https://automacoes.exemplo.com"
                    ↑ protocolo já presente
 
-n8n internamente faz (simplificado):
+n8n monta internamente:
   url = "https://" + N8N_WEBHOOK_URL + "/webhook/..."
-      = "https://https://automacoes.vivaceengenharia.com/webhook/..."
-                                                                    ↑ INVÁLIDA
+      = "https://https://automacoes.exemplo.com/webhook/..."
 ```
 
-> Esse comportamento varia conforme a versão do n8n. Em algumas versões, `N8N_WEBHOOK_URL` é usada diretamente como prefixo; em outras, é tratada como host puro. O ponto seguro é sempre incluir o protocolo no valor — e não confiar em concatenação implícita.
+Esse comportamento varia por versão. O ponto importante aqui é não assumir que todo n8n interpreta `N8N_WEBHOOK_URL` do mesmo jeito.
 
 ---
 
@@ -43,91 +42,83 @@ n8n internamente faz (simplificado):
 docker exec n8n env | grep -i webhook
 
 # Verificar no .env
-grep -i webhook /root/data/.env
+grep -i webhook data/.env
 ```
 
-A URL exibida na interface do n8n também entrega o problema imediatamente — basta abrir qualquer nó Webhook e ver o campo "Webhook URL".
+Também vale validar diretamente na interface: basta abrir qualquer nó Webhook e conferir o campo "Webhook URL".
 
 ---
 
 ## Solução
 
-Definir `N8N_WEBHOOK_URL` com o protocolo incluído, sem trailing slash — exatamente como o n8n espera receber para usar como base:
+Para a versão em uso neste stack, o valor correto ficou **sem protocolo** e sem trailing slash:
 
 ### `.env` — antes (incorreto)
 
 ```env
-N8N_WEBHOOK_URL=https://automacoes.vivaceengenharia.com
+N8N_WEBHOOK_URL=https://automacoes.exemplo.com
 ```
 
-> O problema não estava no valor em si, mas em como ele estava sendo processado. A solução correta é garantir que o valor inclua o protocolo e seja usado como URL base completa.
-
-### `.env` — depois (correto)
+### `.env` — depois (correto neste ambiente)
 
 ```env
-N8N_WEBHOOK_URL=https://automacoes.vivaceengenharia.com
-```
-
-Se o n8n estiver duplicando o protocolo, a correção é remover o `https://` do valor e deixar apenas o host — ou, dependendo da versão, o oposto. Verificar com:
-
-```bash
-# Testar qual formato elimina a duplicação
-docker exec n8n env | grep WEBHOOK_URL
-```
-
-**Para a versão em uso neste stack, o valor correto é sem protocolo:**
-
-```env
-N8N_WEBHOOK_URL=automacoes.vivaceengenharia.com
+N8N_WEBHOOK_URL=automacoes.exemplo.com
 ```
 
 ### Aplicar a mudança
 
 ```bash
 # 1. Editar o .env
-nano /root/data/.env
-# Alterar: N8N_WEBHOOK_URL=automacoes.vivaceengenharia.com
+nano data/.env
 
-# 2. Recriar o container para aplicar a nova variável
-cd /root/data && docker compose up -d --force-recreate n8n
+# 2. Ajustar a variável
+# N8N_WEBHOOK_URL=automacoes.exemplo.com
 
-# 3. Confirmar que o container subiu
+# 3. Recriar o container
+cd data && docker compose up -d --force-recreate n8n
+
+# 4. Confirmar
 docker logs n8n --tail 10
-# Esperado: "n8n ready on ::, port 5678"
+```
 
-# 4. Validar a URL na interface
-# Abrir qualquer nó Webhook no n8n e verificar se a URL está correta:
-# https://automacoes.vivaceengenharia.com/webhook-test/<uuid>
+### Verificação esperada
+
+Abrindo qualquer nó Webhook na interface, a URL deve aparecer no formato:
+
+```text
+https://automacoes.exemplo.com/webhook-test/<uuid>
 ```
 
 ---
 
 ## Por que isso aconteceu agora?
 
-A variável `N8N_WEBHOOK_URL` **não existia** no compose antes do deploy do PgBouncer. Sem ela, o n8n tentava inferir a URL pública a partir de outras variáveis (`N8N_HOST`, `N8N_PROTOCOL`, `N8N_PORT`) ou deixava a URL como localhost.
+Antes dessa reorganização, `N8N_WEBHOOK_URL` não estava sendo usada. O n8n tentava inferir a URL pública a partir de outras variáveis, como `N8N_HOST` e `N8N_PROTOCOL`.
 
-Durante o deploy do PgBouncer, o compose foi reorganizado e `N8N_WEBHOOK_URL` foi adicionada com o valor `https://automacoes.vivaceengenharia.com` — incluindo o protocolo — o que causou a duplicação.
+Quando `N8N_WEBHOOK_URL` passou a ser preenchida manualmente com `https://` incluso, a versão em uso do n8n concatenou o protocolo novamente e produziu a URL inválida.
 
-```
-Antes do PgBouncer:
-  N8N_WEBHOOK_URL não definida → n8n inferia a URL internamente → sem problema
+```text
+Antes:
+  N8N_WEBHOOK_URL não definida
+  → n8n inferia a URL internamente
 
-Depois do PgBouncer:
-  N8N_WEBHOOK_URL=https://automacoes.vivaceengenharia.com
-  → n8n concatenou https:// + valor → https://https://...
+Depois:
+  N8N_WEBHOOK_URL=https://automacoes.exemplo.com
+  → n8n concatenou https:// + valor
+  → https://https://...
 ```
 
 ---
 
-## Referência rápida — formatos aceitos por versão
+## Referência rápida
 
-| Comportamento observado | Valor correto para `N8N_WEBHOOK_URL` |
+| Comportamento observado | Valor a testar em `N8N_WEBHOOK_URL` |
 |---|---|
-| URL duplica o protocolo (`https://https://...`) | `automacoes.vivaceengenharia.com` (sem protocolo) |
-| URL aparece como `http://` quando deveria ser `https://` | `https://automacoes.vivaceengenharia.com` (com protocolo) |
-| URL usa porta errada ou caminho errado | Incluir porta e/ou subpath: `automacoes.vivaceengenharia.com:5678` |
+| URL duplica o protocolo (`https://https://...`) | `automacoes.exemplo.com` |
+| URL sai com `http://` quando deveria ser `https://` | `https://automacoes.exemplo.com` |
+| URL usa porta ou caminho errados | incluir porta e/ou subpath necessários |
 
-> Sempre validar na interface após qualquer mudança nesta variável.
+Sempre validar na interface depois de alterar essa variável. O formato correto depende da versão e do modo como o n8n está montando a URL pública.
 
 ---
 
@@ -135,11 +126,10 @@ Depois do PgBouncer:
 
 | # | Aprendizado |
 |---|---|
-| 1 | `N8N_WEBHOOK_URL` define o **prefixo base** da URL pública — o comportamento de concatenação varia por versão |
-| 2 | Ao adicionar `N8N_WEBHOOK_URL` pela primeira vez, testar na interface antes de usar em produção |
-| 3 | A variável deve estar no `.env`, não hardcoded no `docker-compose.yml`, para facilitar ajustes sem alterar o versionado |
-| 4 | Reorganizações de compose (como durante deploys de novos serviços) são um momento de risco para introdução de variáveis com formato errado |
-| 5 | O sintoma (`https://https://`) é autoexplicativo — qualquer URL de webhook com protocolo duplicado aponta direto para esta variável |
+| 1 | `N8N_WEBHOOK_URL` precisa ser validada na prática, não só “preenchida corretamente” em tese |
+| 2 | O comportamento dessa variável pode mudar entre versões |
+| 3 | Reorganizações de compose e `.env` são um ponto comum para introduzir regressões de webhook |
+| 4 | Quando o sintoma é `https://https://...`, o primeiro lugar para revisar é `N8N_WEBHOOK_URL` |
 
 ---
 

@@ -1,7 +1,7 @@
 # Runbook: n8n
 
 **Container:** `n8n` | **Porta:** `5678`
-**Compose:** `/root/data/docker-compose.yml`
+**Compose:** `data/docker-compose.yml`
 **Banco:** `n8n` via PgBouncer (`pgbouncer:6432`)
 
 ---
@@ -28,7 +28,7 @@ docker run --rm -v n8n_n8n_data:/data alpine cat /data/config
 docker restart n8n
 
 # Recriar (aplica mudanças no compose/env)
-cd /root/data && docker compose up -d --force-recreate n8n
+cd data && docker compose up -d --force-recreate n8n
 ```
 
 ---

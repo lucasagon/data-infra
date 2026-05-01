@@ -17,7 +17,7 @@ WHERE state = 'idle' AND pid <> pg_backend_pid();"
 docker logs pgbouncer --tail=50
 
 # 3. Se necessário, reiniciar PgBouncer
-cd /root/infra && docker compose restart pgbouncer
+cd infra && docker compose restart pgbouncer
 ```
 
 > Ver troubleshooting completo: [001-maxconnections_pgsql](../troubleshooting/001-maxconnections_pgsql.md)
@@ -31,7 +31,7 @@ cd /root/infra && docker compose restart pgbouncer
 docker logs pgbouncer --tail=20 | grep "unsupported"
 
 # Adicionar à lista de ignorados
-nano /root/infra/pgbouncer/pgbouncer.ini
+nano infra/pgbouncer/pgbouncer.ini
 # ignore_startup_parameters = extra_float_digits,statement_timeout,<novo_parametro>
 
 # Recarregar sem downtime
@@ -49,10 +49,10 @@ docker kill --signal=SIGHUP pgbouncer
 docker run --rm -v n8n_n8n_data:/data alpine cat /data/config
 
 # Copiar o valor de "encryptionKey" e colocar no .env
-nano /root/data/.env
+nano data/.env
 # N8N_ENCRYPTION_KEY=<valor do volume>
 
-cd /root/data && docker compose up -d --force-recreate n8n
+cd data && docker compose up -d --force-recreate n8n
 ```
 
 > Ver troubleshooting completo: [004-n8n_encryption_key](../troubleshooting/004-n8n_encryption_key.md)

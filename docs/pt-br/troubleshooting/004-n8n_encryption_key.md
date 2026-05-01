@@ -57,11 +57,11 @@ docker run --rm -v n8n_n8n_data:/data alpine cat /data/config
 # Copiar o valor de "encryptionKey"
 
 # 2. Colar no .env
-nano /root/data/.env
+nano data/.env
 # N8N_ENCRYPTION_KEY=<valor copiado acima>
 
 # 3. Recriar o container
-cd /root/data && docker compose up -d --force-recreate n8n
+cd data && docker compose up -d --force-recreate n8n
 
 # 4. Confirmar
 docker logs n8n --tail 10
@@ -89,7 +89,7 @@ docker run --rm -v n8n_n8n_data:/data alpine rm /data/config
 # Gerar nova chave e colocar no .env
 openssl rand -hex 32
 
-cd /root/data && docker compose up -d n8n
+cd data && docker compose up -d n8n
 ```
 
 ---

@@ -154,4 +154,4 @@ GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO pgbouncer_auth;
 ## Referências
 
 - [003-pgbouncer_deploy](003-pgbouncer_deploy.md)
-- [Arquitetura: PgBouncer](../archtecture/pgbouncer.md)
+- [Arquitetura: PgBouncer](../architecture/pgbouncer.md)

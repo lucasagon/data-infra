@@ -1,0 +1,12 @@
+{
+    email admin@example.com
+}
+
+# Exemplo inicial. Ajuste domínios e upstreams antes do deploy.
+metabase.example.com {
+    reverse_proxy metabase:3000
+}
+
+n8n.example.com {
+    reverse_proxy n8n:5678
+}

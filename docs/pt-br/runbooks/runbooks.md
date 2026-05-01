@@ -35,6 +35,7 @@
 | [005-n8n_import_workflows](../troubleshooting/005-n8n_import_workflows.md) | n8n — Importação de workflows |
 | [006-n8n_update_postgres_credentials](../troubleshooting/006-n8n_update_postgres_credentials.md) | n8n — Atualização de credenciais PostgreSQL |
 | [007-n8n_webhook_url_duplicada](../troubleshooting/007-n8n_webhook_url_duplicada.md) | n8n — Webhook URL duplicada |
+| [008-postgres_crash_watchtower_sigkill](../troubleshooting/008-postgres_crash_watchtower_sigkill.md) | Postgres reiniciando após atualização do Watchtower |
 
 ---
 
@@ -42,4 +43,4 @@
 
 | Documento | Assunto |
 |---|---|
-| [pgbouncer](../archtecture/pgbouncer.md) | Arquitetura do PgBouncer — fluxo, auth, pool, limitações |
+| [pgbouncer](../architecture/pgbouncer.md) | Arquitetura do PgBouncer — fluxo, auth, pool, limitações |

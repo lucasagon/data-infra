@@ -4,7 +4,7 @@
 **Imagem:** `edoburu/pgbouncer:latest` (v1.25.1)
 **Modo:** transaction pooling
 **Destino:** `postgres:5432` (rede interna Docker)
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 
 ---
 
@@ -61,13 +61,13 @@ SHOW DATABASES;
 docker kill --signal=SIGHUP pgbouncer
 
 # Reiniciar o container (derruba conexões ativas)
-cd /root/infra && docker compose restart pgbouncer
+cd infra && docker compose restart pgbouncer
 
 # Ver logs em tempo real
 docker logs pgbouncer -f --tail=100
 
 # Forçar recriação do container
-cd /root/infra && docker compose up -d --force-recreate pgbouncer
+cd infra && docker compose up -d --force-recreate pgbouncer
 ```
 
 ---
@@ -86,8 +86,8 @@ cd /root/infra && docker compose up -d --force-recreate pgbouncer
 
 | Arquivo | Caminho no host |
 |---|---|
-| Configuração principal | `/root/infra/pgbouncer/pgbouncer.ini` |
-| Credenciais do auth_user | `/root/infra/pgbouncer/userlist.txt` |
+| Configuração principal | `infra/pgbouncer/pgbouncer.ini` |
+| Credenciais do auth_user | `infra/pgbouncer/userlist.txt` |
 
 ---
 
@@ -95,7 +95,7 @@ cd /root/infra && docker compose up -d --force-recreate pgbouncer
 
 ```bash
 # 1. Editar o ini
-nano /root/infra/pgbouncer/pgbouncer.ini
+nano infra/pgbouncer/pgbouncer.ini
 
 # 2. Recarregar sem downtime
 docker kill --signal=SIGHUP pgbouncer

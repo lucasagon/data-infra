@@ -1,7 +1,7 @@
 # Runbook: Caddy
 
 **Container:** `caddy` | **Portas:** `80` (HTTP), `443` (HTTPS)
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 **Config:** `/opt/caddy/Caddyfile`
 
 ---

@@ -1,7 +1,7 @@
 # Runbook: Watchtower
 
 **Container:** `watchtower`
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 **Função:** Atualiza automaticamente as imagens Docker dos containers em execução.
 
 ---

@@ -1,7 +1,7 @@
 # Runbook: PostgreSQL
 
 **Container:** `postgres` | **Porta externa:** `5433` | **Porta interna:** `5432`
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 
 ---
 
@@ -69,10 +69,10 @@ docker exec postgres pg_dump -U postgres -d n8n > n8n_backup_$(date +%Y%m%d_%H%M
 ## Reiniciar / recriar
 
 ```bash
-cd /root/infra && docker compose restart postgres
+cd infra && docker compose restart postgres
 
 # Recriar (aplica mudanças de configuração)
-cd /root/infra && docker compose up -d --force-recreate postgres
+cd infra && docker compose up -d --force-recreate postgres
 ```
 
 ---

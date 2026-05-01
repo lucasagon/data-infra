@@ -1,7 +1,7 @@
 # Runbook: Portainer
 
 **Container:** `portainer` | **Porta:** `9000` (HTTP) / `9443` (HTTPS)
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 
 ---
 

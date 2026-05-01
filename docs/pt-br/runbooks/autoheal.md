@@ -1,7 +1,7 @@
 # Runbook: Autoheal
 
 **Container:** `autoheal`
-**Compose:** `/root/data/docker-compose.yml`
+**Compose:** `data/docker-compose.yml`
 **Função:** Monitora containers com healthcheck configurado e reinicia automaticamente os que entram em estado `unhealthy`.
 
 ---
@@ -42,7 +42,7 @@ docker restart autoheal
 docker stop autoheal
 
 # Subir o autoheal via compose
-docker compose -f /root/data/docker-compose.yml up -d autoheal
+docker compose -f data/docker-compose.yml up -d autoheal
 
 # Forçar reinício manual de um container unhealthy (sem aguardar autoheal)
 docker restart <container_name>

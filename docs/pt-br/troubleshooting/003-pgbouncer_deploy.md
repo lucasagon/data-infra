@@ -38,12 +38,12 @@ FATAL cannot load config file
 
 **Causa:** O compose foi escrito para a imagem Bitnami (env vars). A imagem `edoburu` requer arquivo `.ini` explícito.
 
-**Solução:** Criar `/root/infra/pgbouncer/pgbouncer.ini` e montá-lo:
+**Solução:** Criar `infra/pgbouncer/pgbouncer.ini` e montá-lo:
 
 ```yaml
 volumes:
-  - /root/infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-  - /root/infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+  - infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+  - infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
 ```
 
 ---
@@ -95,7 +95,7 @@ ERROR unknown parameter: pgbouncer/auth_password
 
 **Causa:** O PgBouncer não tem parâmetro `auth_password` no `.ini`. A senha do `auth_user` vai no `userlist.txt`.
 
-**Solução:** Criar `/root/infra/pgbouncer/userlist.txt`:
+**Solução:** Criar `infra/pgbouncer/userlist.txt`:
 
 ```
 "pgbouncer_auth" "senha_aqui"
@@ -169,7 +169,7 @@ Recarregar:
 docker kill --signal=SIGHUP pgbouncer
 
 # Se persistir, reiniciar o container
-cd /root/infra && docker compose restart pgbouncer
+cd infra && docker compose restart pgbouncer
 ```
 
 ---

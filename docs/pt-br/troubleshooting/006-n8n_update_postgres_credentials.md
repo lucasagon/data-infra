@@ -154,5 +154,5 @@ Para evitar retrabalho em futuras trocas de credencial:
 
 ## Referências
 
-- [Arquitetura: n8n](../archtecture/n8n.md)
+- [Arquitetura: n8n](../architecture/n8n.md)
 - [n8n API — Workflows](https://docs.n8n.io/api/api-reference/#tag/Workflow)

@@ -78,7 +78,7 @@ POSTGRES_MAX_CONNECTIONS=300
 ### 3.3 Aplicação da mudança
 
 ```bash
-cd /root/infra && docker compose up -d --force-recreate postgres
+cd infra && docker compose up -d --force-recreate postgres
 ```
 
 ### 3.4 Validação

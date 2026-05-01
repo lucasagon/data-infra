@@ -45,7 +45,7 @@ Isso dá 60 segundos para o Postgres executar checkpoint e encerrar graciosament
 Após a alteração, recriar o container:
 
 ```bash
-cd /root/infra
+cd infra
 docker compose up -d --force-recreate watchtower
 ```
 
@@ -97,7 +97,7 @@ healthcheck:
 Recriar o container para aplicar:
 
 ```bash
-cd /root/data
+cd data
 docker compose up -d --force-recreate n8n
 ```
 

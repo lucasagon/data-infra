@@ -1,7 +1,7 @@
 # Runbook: Uptime Kuma
 
 **Container:** `uptime-kuma` | **Porta:** `3001`
-**Compose:** `/root/infra/docker-compose.yml`
+**Compose:** `infra/docker-compose.yml`
 
 ---
 
