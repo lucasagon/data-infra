@@ -22,6 +22,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.metabase.rule=Host(`metabase.vivaceengenharia.com`)"
+      - "traefik.http.routers.metabase.service=metabase"
       - "traefik.http.routers.metabase.entrypoints=websecure"
       - "traefik.http.routers.metabase.tls.certresolver=letsencrypt"
       - "traefik.http.services.metabase.loadbalancer.server.port=3000"
@@ -58,6 +59,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n.rule=Host(`automacoes.vivaceengenharia.com`)"
+      - "traefik.http.routers.n8n.service=n8n"
       - "traefik.http.routers.n8n.entrypoints=websecure"
       - "traefik.http.routers.n8n.tls.certresolver=letsencrypt"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
@@ -83,6 +85,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mage.rule=Host(`mage.vivaceengenharia.com`)"
+      - "traefik.http.routers.mage.service=mage"
       - "traefik.http.routers.mage.entrypoints=websecure"
       - "traefik.http.routers.mage.tls.certresolver=letsencrypt"
       - "traefik.http.services.mage.loadbalancer.server.port=6789"
@@ -113,6 +116,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.vivaceengenharia.com`)"
+      - "traefik.http.routers.pgadmin.service=pgadmin"
       - "traefik.http.routers.pgadmin.entrypoints=websecure"
       - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
       - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
