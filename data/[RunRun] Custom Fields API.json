@@ -1,0 +1,510 @@
+{
+  "name": "[RunRun] Custom Fields API",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -128
+      ],
+      "id": "a8871a5c-463a-44c7-a55b-b420254b0649",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH latest_tasks AS (\n      SELECT DISTINCT ON (board_id)\n          board_id,\n          task_id,\n          title,\n          created_at,\n          extracted_at\n      FROM runrun_staging.tasks_a\n      WHERE board_id IS NOT NULL\n      ORDER BY\n          board_id,\n          extracted_at DESC NULLS LAST,\n          created_at DESC NULLS LAST,\n          task_id DESC\n  )\n  SELECT\n      b.record_id AS board_id,\n      lt.task_id\n  FROM runrun_raw.boards_a b\n  LEFT JOIN latest_tasks lt\n      ON lt.board_id::text = b.record_id\n  ORDER BY b.record_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "30884386-5927-4297-862b-9c0d4fc80ec5",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "lSK4RLQrmXu0xjBL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "7b682a2f-cb72-4267-b8d4-00f15dae91ba",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "=https://runrun.it/api/v1.0/tasks/{{ $json.task_id }}/fields",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "App-Key",
+              "value": "9c13b7d24e4f38782e929984559f8aef"
+            },
+            {
+              "name": "User-Token",
+              "value": "ZrUlvtQOkQSjDBcXJcFG"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        32
+      ],
+      "id": "035b476f-7d4a-458c-91de-f9ce5966d934",
+      "name": "get_tasks_custom_fields",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "17133dd9-ce4c-4a39-bda6-8fe9af794467",
+              "leftValue": "={{ $json.task_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        16
+      ],
+      "id": "8e5df05c-2260-49a9-86bb-ccce00710cb1",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        32
+      ],
+      "id": "959a0737-cb80-47fe-b543-46ce5669365c",
+      "name": "Wait",
+      "webhookId": "9c7ddbe5-604d-446d-a58a-5ddb304dd186"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -256
+      ],
+      "id": "37275d94-513f-4dcc-b1e2-057a9929b505",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        944,
+        -256
+      ],
+      "id": "a590181b-70f8-47d4-b654-f18859b444a2",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6ffd0ca-2c4d-41ef-9d1f-88457b3d91a2",
+              "name": "board_id",
+              "value": "={{ $json.board_id }}",
+              "type": "string"
+            },
+            {
+              "id": "48952e80-ca7a-4f2f-a4a0-af8ef99da08e",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "4b687d4e-6800-48f6-81e9-e967029181db",
+              "name": "label",
+              "value": "={{ $json.label }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1184,
+        -240
+      ],
+      "id": "8aac912e-1970-41c9-bd23-35ea94b62f5c",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "runrun_raw",
+          "mode": "list",
+          "cachedResultName": "runrun_raw"
+        },
+        "table": {
+          "__rl": true,
+          "value": "custom_fields_a",
+          "mode": "list",
+          "cachedResultName": "custom_fields_a"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "label": "={{ $json.label }}",
+            "extracted_at": "={{$now}}",
+            "board_id": "={{ $json.board_id }}"
+          },
+          "matchingColumns": [
+            "id",
+            "board_id"
+          ],
+          "schema": [
+            {
+              "id": "board_id",
+              "displayName": "board_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "extracted_at",
+              "displayName": "extracted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1392,
+        -240
+      ],
+      "id": "fb71c16b-2d03-4241-b31a-c392e2c3cc41",
+      "name": "Insert or update rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "lSK4RLQrmXu0xjBL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        16,
+        112
+      ],
+      "id": "5379833d-c647-4c53-9eeb-4cd64403b166",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO runrun_staging.custom_fields_a (\n    id,\n    label,\n    updated_at\n)\nSELECT DISTINCT ON (id)\n    id,\n    label,\n    extracted_at AS updated_at\nFROM runrun_raw.custom_fields_a\nORDER BY id, extracted_at DESC\nON CONFLICT (id)\nDO UPDATE SET\n    label = EXCLUDED.label,\n    updated_at = EXCLUDED.updated_at;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1184,
+        -432
+      ],
+      "id": "ab0c2d64-8c53-4309-8995-f7f4e6a8c453",
+      "name": "Fields: staging -> analytics",
+      "credentials": {
+        "postgres": {
+          "id": "lSK4RLQrmXu0xjBL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO runrun_staging.task_custom_fields_a (record_id, task_id, created_at, field_id, field_name, field_value, value_id, value_color, value_label, updated_at)\nSELECT\nmd5(task_id || '-' || field_id) AS record_id,\ntask_id,\ncreated_at,\nfield_id,\nfield_name,\nfield_value,\nCASE\nWHEN jsonb_typeof(field_value) = 'object' THEN field_value ->> 'id'\nWHEN jsonb_typeof(field_value) = 'array' THEN field_value -> 0 ->> 'id'\nWHEN jsonb_typeof(field_value) = 'string' AND field_value::text LIKE '%id%' THEN substring(field_value::text FROM '''id'': ''([^'']+)''')\nELSE NULL\nEND AS value_id,\nCASE\nWHEN jsonb_typeof(field_value) = 'object' THEN field_value ->> 'color'\nWHEN jsonb_typeof(field_value) = 'array' THEN field_value -> 0 ->> 'color'\nWHEN jsonb_typeof(field_value) = 'string' AND field_value::text LIKE '%color%' THEN substring(field_value::text FROM '''color'': ([^,}\\]]+)')\nELSE NULL\nEND AS value_color,\nCASE\nWHEN jsonb_typeof(field_value) = 'object' THEN field_value ->> 'label'\nWHEN jsonb_typeof(field_value) = 'array' THEN field_value -> 0 ->> 'label'\nWHEN jsonb_typeof(field_value) = 'string' AND field_value::text LIKE '%label%' THEN substring(field_value::text FROM '''label'': ''([^'']+)''')\nWHEN jsonb_typeof(field_value) IN ('string', 'number', 'boolean') THEN trim(both '\"' from field_value::text)\nELSE NULL\nEND AS value_label,\nnow() AS updated_at\nFROM (\nSELECT DISTINCT ON (\nt.payload_json::jsonb ->> 'id',\ncf.key\n)\n(t.payload_json::jsonb ->> 'id')::text AS task_id,\n(t.payload_json::jsonb ->> 'created_at')::timestamptz AS created_at,\ncf.key AS field_id,\ncfa.label AS field_name,\ncf.value AS field_value\nFROM runrun_raw.tasks_a t\nCROSS JOIN LATERAL jsonb_each(\nt.payload_json::jsonb -> 'custom_fields'\n) cf(key, value)\nLEFT JOIN runrun_staging.custom_fields_a cfa\nON cfa.id = cf.key\nWHERE\ncf.value <> 'null'::jsonb\nAND t.extracted_at > '2026-05-15 19:23:36.288+00'\nORDER BY\nt.payload_json::jsonb ->> 'id',\ncf.key,\n(t.payload_json::jsonb ->> 'created_at')::timestamptz DESC\n) x\nON CONFLICT (record_id, field_id)\nDO UPDATE SET\ntask_id = EXCLUDED.task_id,\ncreated_at = EXCLUDED.created_at,\nfield_name = EXCLUDED.field_name,\nfield_value = EXCLUDED.field_value,\nvalue_id = EXCLUDED.value_id,\nvalue_color = EXCLUDED.value_color,\nvalue_label = EXCLUDED.value_label,\nupdated_at = now();",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1392,
+        -432
+      ],
+      "id": "2bc3b104-3a85-418e-a25b-acfbf374fc4f",
+      "name": "Tasks Custom: staging -> analytics",
+      "credentials": {
+        "postgres": {
+          "id": "lSK4RLQrmXu0xjBL",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_tasks_custom_fields": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get_tasks_custom_fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Fields: staging -> analytics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Insert or update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert or update rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fields: staging -> analytics": {
+      "main": [
+        [
+          {
+            "node": "Tasks Custom: staging -> analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "94608f55-565a-42aa-963b-bcbdb765a60f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f5b98fa47ce01e3746cd403cb73e594cf1b27444e7eeb743ddda121d0332c710"
+  },
+  "id": "bY03OyaUrf5J9wDi",
+  "tags": []
+}

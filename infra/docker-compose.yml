@@ -25,19 +25,7 @@ services:
       - caddy_caddy_config:/config
     networks:
       - app_network
-
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9443:9443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    networks:
-      - app_network
+      - app_network_dev
 
   watchtower:
     image: containrrr/watchtower
@@ -47,7 +35,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_API_VERSION=1.44
-    command: --cleanup --interval 300 --stop-timeout 60
+    command: --cleanup --schedule "0 30 3 * * *" --stop-timeout 60s
     networks:
       - app_network
 
@@ -94,4 +82,6 @@ volumes:
 
 networks:
   app_network:
+    external: true
+  app_network_dev:
     external: true
