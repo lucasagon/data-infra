@@ -515,3 +515,27 @@ Antes de alterar Mage, n8n ou Postgres:
     - Todos os domínios testáveis via script de monitoramento
     - 4 warnings residuais de ambigüidade (não afetam roteamento)
     - Script criado: `bash /opt/traefik/monitor-domains.sh`
+
+- 2026-06-02T15:05:00Z
+  - Componente: Infraestrutura (Traefik - Validação Final)
+  - Mudança:
+    - Validação completa de certificados SSL via Let's Encrypt
+    - Reiniciado container Portainer (estava parado por 3 semanas)
+    - Confirmado funcionamento de todos os routers após inicialização
+  - Impacto:
+    - 9 certificados Let's Encrypt carregados em acme.json (portainer, uptime, metabase, pgadmin, mage, automacoes, estoque, flow, dev-flow)
+    - 3 domínios sem certificado ainda (api, airbyte, grafana): api por falha na app vivace-api (timeout Redis), airbyte/grafana offline
+    - Portainer agora respondendo com HTTP 200
+  - Validação:
+    - flow.vivaceengenharia.com: HTTP 200 ✅
+    - dev-flow.vivaceengenharia.com: HTTP 200 ✅
+    - estoque.vivaceengenharia.com: HTTP 200 ✅
+    - mage.vivaceengenharia.com: HTTP 200 ✅
+    - automacoes.vivaceengenharia.com: HTTP 200 ✅
+    - metabase.vivaceengenharia.com: HTTP 200 ✅
+    - uptime.vivaceengenharia.com: HTTP 302 (redirect) ✅
+    - pgadmin.vivaceengenharia.com: HTTP 302 (redirect) ✅
+    - api.vivaceengenharia.com: HTTP 404 (app vivace-api com erro Redis timeout)
+    - portainer.vivaceengenharia.com: HTTP 200 ✅
+    - Traefik container rodando sem erros de ACME ou roteamento
+    - Logs do Traefik limpos de erros críticos
