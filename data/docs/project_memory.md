@@ -521,21 +521,22 @@ Antes de alterar Mage, n8n ou Postgres:
   - Mudança:
     - Validação completa de certificados SSL via Let's Encrypt
     - Reiniciado container Portainer (estava parado por 3 semanas)
+    - Corrigido vivace-api-redis (estava parado, causando timeout na app)
     - Confirmado funcionamento de todos os routers após inicialização
   - Impacto:
-    - 9 certificados Let's Encrypt carregados em acme.json (portainer, uptime, metabase, pgadmin, mage, automacoes, estoque, flow, dev-flow)
-    - 3 domínios sem certificado ainda (api, airbyte, grafana): api por falha na app vivace-api (timeout Redis), airbyte/grafana offline
+    - **10 certificados Let's Encrypt carregados com sucesso** (todos os domínios principais)
+    - api.vivaceengenharia.com agora com certificado válido (Let's Encrypt YR1)
     - Portainer agora respondendo com HTTP 200
   - Validação:
-    - flow.vivaceengenharia.com: HTTP 200 ✅
-    - dev-flow.vivaceengenharia.com: HTTP 200 ✅
-    - estoque.vivaceengenharia.com: HTTP 200 ✅
-    - mage.vivaceengenharia.com: HTTP 200 ✅
-    - automacoes.vivaceengenharia.com: HTTP 200 ✅
-    - metabase.vivaceengenharia.com: HTTP 200 ✅
-    - uptime.vivaceengenharia.com: HTTP 302 (redirect) ✅
-    - pgadmin.vivaceengenharia.com: HTTP 302 (redirect) ✅
-    - api.vivaceengenharia.com: HTTP 404 (app vivace-api com erro Redis timeout)
-    - portainer.vivaceengenharia.com: HTTP 200 ✅
-    - Traefik container rodando sem erros de ACME ou roteamento
-    - Logs do Traefik limpos de erros críticos
+    - flow.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - dev-flow.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - estoque.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - mage.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - automacoes.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - metabase.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - uptime.vivaceengenharia.com: HTTP 302 + Let's Encrypt ✅
+    - pgadmin.vivaceengenharia.com: HTTP 302 + Let's Encrypt ✅
+    - api.vivaceengenharia.com: HTTP 200 (/health) + Let's Encrypt ✅
+    - portainer.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
+    - Traefik container rodando sem erros
+    - Todos os certificados válidos (CN correto, Issuer Let's Encrypt)
