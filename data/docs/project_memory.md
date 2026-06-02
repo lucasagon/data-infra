@@ -19,6 +19,7 @@ Antes de alterar Mage, n8n ou Postgres:
   - n8n em Docker.
   - Postgres em Docker.
   - pgAdmin4 para acesso ao banco (subsituiu CloudBeaver em 2026-06-02).
+  - Traefik v3 como reverse proxy (subsituiu Caddy em 2026-06-02).
 
 ### Mage
 
@@ -495,3 +496,22 @@ Antes de alterar Mage, n8n ou Postgres:
     - logs do container confirmam inicialização completa;
     - commit `40297c9` pushado para `github.com:lucasagon/data-infra.git` branch `master`.
 
+
+- 2026-06-02T14:52:00Z
+  - Componente: Infraestrutura (Reverse Proxy)
+  - Mudança:
+    - Migração completa de Caddy para Traefik v3
+    - Removidos volumes antigos do Caddy (`caddy_caddy_config`, `caddy_caddy_data`)
+    - Adicionados labels Traefik explícitos em todos os 24 routers
+    - Criado script de monitoramento de domínios em `/opt/traefik/monitor-domains.sh`
+  - Impacto:
+    - Traefik agora gerencia todos os 12 domínios (flow, dev-flow, estoque, mage, automacoes, metabase, uptime, pgadmin, api, portainer, airbyte, grafana)
+    - Let's Encrypt integrado nativamente (certificados em `/opt/traefik/` via Docker volume)
+    - Path stripping automático via middlewares (6 caminhos em flow.vivaceengenharia.com)
+    - Suporte para múltiplas redes (app_network, app_network_dev)
+  - Validação:
+    - 27 containers rodando sem erros críticos
+    - Certificados TLS gerados automaticamente (114KB acme.json)
+    - Todos os domínios testáveis via script de monitoramento
+    - 4 warnings residuais de ambigüidade (não afetam roteamento)
+    - Script criado: `bash /opt/traefik/monitor-domains.sh`
