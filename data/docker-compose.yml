@@ -46,13 +46,11 @@ services:
       WEBHOOK_URL: ${N8N_WEBHOOK_URL}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: pgbouncer
-      DB_POSTGRESDB_PORT: 6432
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
       DB_POSTGRESDB_DATABASE: n8n
       DB_POSTGRESDB_USER: ${N8N_DB_USER}
       DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASS}
-      DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_PORT: 5432
       N8N_TRUST_PROXY: "true"
     volumes:
       - n8n_n8n_data:/home/node/.n8n
