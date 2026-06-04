@@ -1,24 +1,5 @@
 services:
 
-  uptime-kuma:
-    image: louislam/uptime-kuma:latest
-    container_name: uptime-kuma
-    restart: unless-stopped
-    volumes:
-      - uptime_kuma_data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "3001:3001"
-    networks:
-      - app_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.uptime.rule=Host(`uptime.vivaceengenharia.com`)"
-      - "traefik.http.routers.uptime.service=uptime"
-      - "traefik.http.routers.uptime.entrypoints=websecure"
-      - "traefik.http.routers.uptime.tls.certresolver=letsencrypt"
-      - "traefik.http.services.uptime.loadbalancer.server.port=3001"
-
   traefik:
     image: traefik:v3
     container_name: traefik
@@ -66,9 +47,7 @@ services:
       - app_network
 
 volumes:
-  portainer_data:
   postgres_data:
-  uptime_kuma_data:
   traefik_letsencrypt:
 
 networks:
