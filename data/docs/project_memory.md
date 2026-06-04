@@ -567,3 +567,29 @@ Antes de alterar Mage, n8n ou Postgres:
     - Containers Metabase e n8n reiniciados e em execução: ✅
     - Confirmação de presença de todos os schemas no banco postgres via `\dn`: ✅ (17 schemas presentes)
     - Status dos containers: Metabase (Up 22s), n8n (healthy após restart)
+
+- 2026-06-04T01:15:00Z
+  - Componente: Infraestrutura (Remoção do pgbouncer - Conexão Direta ao PostgreSQL)
+  - Mudança:
+    - **Remoção completa do pgbouncer da arquitetura** (serviço parado e removido do docker-compose.yml em `/root/infra/`)
+    - **Atualização de configurações** para conexão direta ao PostgreSQL:
+      - Metabase: `MB_DB_HOST=pgbouncer:6432` → `MB_DB_HOST=postgres:5432`
+      - n8n: `DB_POSTGRESDB_HOST=pgbouncer:6432` → `DB_POSTGRESDB_HOST=postgres:5432`
+      - Mage: `MAGE_PG_HOST=pgbouncer:6432` → `MAGE_PG_HOST=postgres:5432`
+      - pgAdmin: mantém conexão direta ao postgres (sem mudança necessária)
+    - Atualizações em dois níveis:
+      1. Arquivo `/root/infra/docker-compose.yml`: remoção do serviço pgbouncer (linhas 68-80)
+      2. Arquivo `/root/data/docker-compose.yml`: ambiente de Metabase e n8n reconfigurados para postgres:5432
+      3. Arquivo `/root/data/.env`: adicionadas variáveis `MB_DB_HOST`, `MB_DB_PORT`, `DB_POSTGRESDB_HOST`, `DB_POSTGRESDB_PORT`
+  - Impacto:
+    - **Arquitetura simplificada**: elimina layer de pool de conexões desnecessário
+    - **Conexão direta ao PostgreSQL**: reduz latência e complexidade
+    - **Redução de resource**: pgbouncer (container + configuração) removido
+    - **Configuração mais clara**: cada aplicação aponta direto para `postgres:5432`
+  - Validação:
+    - pgbouncer parado e removido do docker-compose: ✅
+    - Containers reiniciados (metabase, n8n, mage) após atualização: ✅
+    - Metabase operacional: ✅ (Up 44s, conectado a postgres:5432)
+    - n8n operacional: ✅ (Up 18s, health: starting, conectado a postgres:5432)
+    - Mage operacional: ✅ (Up 31s, logs mostram "AlembicContext impl PostgresqlImpl")
+    - Nenhum erro de conectividade nos logs dos containers: ✅

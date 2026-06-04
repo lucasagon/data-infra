@@ -65,20 +65,6 @@ services:
     networks:
       - app_network
 
-  pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: pgbouncer
-    restart: unless-stopped
-    ports:
-      - "5432:6432"
-    volumes:
-      - /root/infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-      - /root/infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
-    depends_on:
-      - postgres
-    networks:
-      - app_network
-
 volumes:
   portainer_data:
   postgres_data:
