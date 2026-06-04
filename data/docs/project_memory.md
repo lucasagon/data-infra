@@ -540,3 +540,30 @@ Antes de alterar Mage, n8n ou Postgres:
     - portainer.vivaceengenharia.com: HTTP 200 + Let's Encrypt ✅
     - Traefik container rodando sem erros
     - Todos os certificados válidos (CN correto, Issuer Let's Encrypt)
+
+- 2026-06-04T00:30:00Z
+  - Componente: Infraestrutura (PostgreSQL - Restauração de Bancos Locais)
+  - Mudança:
+    - Restauração completa de todos os bancos de dados do PostgreSQL local a partir dos backups em `/root/migration_backups/20260603T170639Z/postgres/`:
+      1. Globals (usuários, roles, permissões): `00_globals.sql`
+      2. Bancos de aplicações: `metabase-db.dump`, `n8n.dump`, `mage_metadata.dump`
+      3. Banco principal com schemas de dados: `postgres.dump` (519MB)
+    - Containers Metabase e n8n reiniciados para reconectar ao PostgreSQL local via pgbouncer
+  - Impacto:
+    - **Toda a infraestrutura de dados agora aponta para o PostgreSQL local do docker-compose** (via pgbouncer na porta 6432)
+    - Bancos de aplicações totalmente restaurados:
+      - `metabase-db`: Metabase reports/cards/dashboards
+      - `n8n`: n8n workflows e execuções
+      - `mage_metadata`: Mage pipelines, schedules, runs
+    - Banco principal (postgres) com todos os schemas de dados:
+      - `runrun_*` (raw, staging, analytics + archives)
+      - `omie_*` (raw, staging, analytics + integration_control)
+      - `tworh_*` (raw, staging, analytics)
+      - `integracoes` (api_client_streams, api_sync_state)
+      - `inventory_control` (controle de estoque)
+  - Validação:
+    - Restauração dos 3 dumps das aplicações: ✅ (concluído em < 1 minuto)
+    - Restauração do banco principal: ✅ (519MB concluído sem erros)
+    - Containers Metabase e n8n reiniciados e em execução: ✅
+    - Confirmação de presença de todos os schemas no banco postgres via `\dn`: ✅ (17 schemas presentes)
+    - Status dos containers: Metabase (Up 22s), n8n (healthy após restart)
